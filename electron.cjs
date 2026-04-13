@@ -8,8 +8,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1200,
     height: 800,
-    titleBarStyle: 'hiddenInset',
-    webPreferences: {
+titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',    webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
     },
@@ -60,12 +59,10 @@ function checkNotifications() {
     tasks.forEach(task => {
       if (task.scheduled_time === currentTime && !isDoneToday(task) && shouldFireToday(task)) {
         const notif = new Notification({
-          title: 'JM Trading',
-          subtitle: 'Task Reminder',
-          body: task.text,
-          sound: 'Blow',
-          urgency: 'critical'
-        })
+  title: 'JM Trading — Task Reminder',
+  body: task.text,
+  urgency: 'critical'
+})
         notif.show()
         notif.on('click', () => {
           if (win) { win.show(); win.focus() }

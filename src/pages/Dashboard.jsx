@@ -37,8 +37,7 @@ function Dashboard() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
           {[
             { label: 'Win Rate', value: winRate + '%', sub: trades.length + ' trades logged', color: '#3D7A52' },
-            { label: 'Net P&L', value: netPnl + 'R', sub: 'all time', color: parseFloat(netPnl) >= 0 ? '#3D7A52' : '#9B3A28' },
-            { label: 'Key Levels', value: levels.length, sub: 'tracked', color: '#2B2318' },
+{ label: 'Risk:Reward', value: netPnl + 'R', sub: 'all time', color: parseFloat(netPnl) >= 0 ? '#3D7A52' : '#9B3A28' },            { label: 'Key Levels', value: levels.length, sub: 'tracked', color: '#2B2318' },
             { label: 'Tasks Today', value: tasks.filter(t => t.done).length + '/' + tasks.length, sub: 'completed', color: '#C8903A' },
           ].map(s => (
             <div key={s.label} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '10px', padding: '14px 16px' }}>

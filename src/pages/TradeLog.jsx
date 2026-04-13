@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabase'
 
-const PAIRS = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT', 'Other']
-
+const PAIRS = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'HYPE/USDT', 'Other']
 function calcR(side, entry, exit, stop) {
   const e = parseFloat(entry), x = parseFloat(exit), s = parseFloat(stop)
   if (!e || !x || !s) return ''
@@ -62,7 +61,7 @@ function TradeLog() {
           <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '12px', padding: '20px' }}>
             <div style={{ fontFamily: 'Lora, serif', fontSize: '14px', fontWeight: 600, color: '#2B2318', marginBottom: '16px' }}>Log a Trade</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-              <div><label style={label}>Pair</label><select value={form.pair} onChange={e => updateForm('pair', e.target.value)} style={input}>{PAIRS.map(p => <option key={p}>{p}</option>)}</select></div>
+              <div><label style={label}>Pair</label><select value={PAIRS.includes(form.pair) ? form.pair : 'Other'} onChange={e => updateForm('pair', e.target.value === 'Other' ? '' : e.target.value)} style={input}>{PAIRS.map(p => <option key={p}>{p}</option>)}</select>{(!PAIRS.includes(form.pair) || form.pair === '') && <input type="text" placeholder="Type ticker e.g. PEPE/USDT" value={form.pair} onChange={e => updateForm('pair', e.target.value)} style={{ ...input, marginTop: '6px' }} />}</div>
               <div><label style={label}>Side</label><select value={form.side} onChange={e => updateForm('side', e.target.value)} style={input}><option>LONG</option><option>SHORT</option></select></div>
               <div><label style={label}>Date</label><input type="date" value={form.date} onChange={e => updateForm('date', e.target.value)} style={input} /></div>
               <div><label style={label}>Entry Price</label><input type="number" placeholder="0.00" value={form.entry_price} onChange={e => updateForm('entry_price', e.target.value)} style={input} /></div>

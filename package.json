@@ -13,9 +13,12 @@
     "appId": "com.jm.trading",
     "productName": "JM Trading",
     "mac": {
-      "category": "public.app-category.finance",
-      "target": "dmg"
-    },
+  "category": "public.app-category.finance",
+  "target": "dmg"
+},
+"win": {
+  "target": "nsis"
+},
     "directories": {
       "output": "release"
     },
