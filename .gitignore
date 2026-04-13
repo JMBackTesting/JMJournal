@@ -1,0 +1,6 @@
+node_modules
+dist
+release
+.env
+build/icon.png
+build/icon.iconset
