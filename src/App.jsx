@@ -7,6 +7,7 @@ import Journal from './pages/Journal'
 import WeeklyReview from './pages/WeeklyReview'
 import Tasks from './pages/Tasks'
 import Analytics from './pages/Analytics'
+import SpotBuys from './pages/SpotBuys'
 
 function App() {
   const [activePage, setActivePage] = useState('dashboard')
@@ -21,6 +22,7 @@ function App() {
         {activePage === 'weekly' && <WeeklyReview />}
         {activePage === 'tasks' && <Tasks />}
         {activePage === 'analytics' && <Analytics />}
+        {activePage === 'spotbuys' && <SpotBuys />}
       </main>
     </div>
   )
