@@ -4,3 +4,4 @@ release
 .env
 build/icon.png
 build/icon.iconset
+.DS_Store
