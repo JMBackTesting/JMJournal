@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../supabase'
 
 function Education() {
@@ -9,7 +9,12 @@ function Education() {
   const [showAddArticle, setShowAddArticle] = useState(false)
   const [expandedArticle, setExpandedArticle] = useState(null)
   const [authorForm, setAuthorForm] = useState({ name: '', description: '' })
-  const [articleForm, setArticleForm] = useState({ title: '', url: '', content: '', notes: '', tags: '', date_read: new Date().toISOString().split('T')[0] })
+  const [articleForm, setArticleForm] = useState({ title: '', url: '', content: '', tags: '', date_read: new Date().toISOString().split('T')[0] })
+  const [imageFiles, setImageFiles] = useState([])
+  const [imagePreviews, setImagePreviews] = useState([])
+  const [saving, setSaving] = useState(false)
+  const fileRef = useRef()
+  const pasteRef = useRef()
 
   useEffect(() => { fetchAuthors() }, [])
   useEffect(() => { if (selectedAuthor) fetchArticles(selectedAuthor.id) }, [selectedAuthor])
@@ -37,18 +42,62 @@ function Education() {
     }
   }
 
+  const handleFileChange = (e) => {
+    const files = Array.from(e.target.files)
+    addImages(files)
+  }
+
+  const handlePaste = (e) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+    const newFiles = []
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image')) {
+        newFiles.push(items[i].getAsFile())
+      }
+    }
+    if (newFiles.length > 0) addImages(newFiles)
+  }
+
+  const addImages = (files) => {
+    setImageFiles(prev => [...prev, ...files])
+    files.forEach(file => {
+      const url = URL.createObjectURL(file)
+      setImagePreviews(prev => [...prev, url])
+    })
+  }
+
+  const removeImage = (index) => {
+    setImageFiles(prev => prev.filter((_, i) => i !== index))
+    setImagePreviews(prev => prev.filter((_, i) => i !== index))
+  }
+
   const saveArticle = async () => {
     if (!articleForm.title || !selectedAuthor) return
+    setSaving(true)
+    const image_urls = []
+    for (const file of imageFiles) {
+      const fileName = Date.now() + '_' + Math.random().toString(36).slice(2) + '.png'
+      const { error } = await supabase.storage.from('charts').upload(fileName, file)
+      if (!error) {
+        const { data: urlData } = supabase.storage.from('charts').getPublicUrl(fileName)
+        image_urls.push(urlData.publicUrl)
+      }
+    }
     await supabase.from('education_articles').insert([{
       author_id: selectedAuthor.id,
       title: articleForm.title,
       url: articleForm.url,
-      notes: articleForm.content || articleForm.notes,
+      notes: articleForm.content,
       tags: articleForm.tags ? articleForm.tags.split(',').map(t => t.trim()) : [],
-      date_read: articleForm.date_read
+      date_read: articleForm.date_read,
+      image_urls
     }])
-    setArticleForm({ title: '', url: '', content: '', notes: '', tags: '', date_read: new Date().toISOString().split('T')[0] })
+    setArticleForm({ title: '', url: '', content: '', tags: '', date_read: new Date().toISOString().split('T')[0] })
+    setImageFiles([])
+    setImagePreviews([])
     setShowAddArticle(false)
+    setSaving(false)
     fetchArticles(selectedAuthor.id)
   }
 
@@ -146,16 +195,37 @@ function Education() {
                     <div><label style={label}>Tags (comma separated)</label><input placeholder="e.g. TA, BTC" value={articleForm.tags} onChange={e => setArticleForm({ ...articleForm, tags: e.target.value })} style={input} /></div>
                   </div>
                   <div style={{ marginBottom: '10px' }}>
-                    <label style={label}>URL (optional — if it has a link)</label>
+                    <label style={label}>URL (optional)</label>
                     <input placeholder="https://..." value={articleForm.url} onChange={e => setArticleForm({ ...articleForm, url: e.target.value })} style={input} />
                   </div>
                   <div style={{ marginBottom: '10px' }}>
-                    <label style={label}>Paste article content (or key notes)</label>
-                    <textarea placeholder="Paste the full article here, or write your key takeaways..." value={articleForm.content} onChange={e => setArticleForm({ ...articleForm, content: e.target.value })} style={{ ...input, height: '120px', resize: 'vertical' }} />
+                    <label style={label}>Paste article content or key notes</label>
+                    <textarea placeholder="Paste the full article here, or write your key takeaways..." value={articleForm.content} onChange={e => setArticleForm({ ...articleForm, content: e.target.value })} style={{ ...input, height: '100px', resize: 'vertical' }} />
+                  </div>
+                  <div style={{ marginBottom: '12px' }}>
+                    <label style={label}>Images (browse or paste multiple)</label>
+                    <div ref={pasteRef} onPaste={handlePaste} tabIndex={0} style={{ border: '2px dashed #C8B89A', borderRadius: '8px', padding: '12px', background: '#F5EFE4', outline: 'none' }}>
+                      {imagePreviews.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+                          {imagePreviews.map((src, i) => (
+                            <div key={i} style={{ position: 'relative' }}>
+                              <img src={src} style={{ height: '80px', borderRadius: '6px', border: '1px solid #C8B89A', objectFit: 'cover' }} />
+                              <button onClick={() => removeImage(i)} style={{ position: 'absolute', top: '-6px', right: '-6px', width: '18px', height: '18px', borderRadius: '50%', background: '#9B3A28', border: 'none', color: 'white', fontSize: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <button type="button" onClick={() => fileRef.current.click()} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '6px', padding: '5px 12px', fontSize: '12px', color: '#5A4535', cursor: 'pointer', fontWeight: 600 }}>Browse files</button>
+                        <button type="button" onClick={() => pasteRef.current.focus()} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '6px', padding: '5px 12px', fontSize: '12px', color: '#5A4535', cursor: 'pointer', fontWeight: 600 }}>Click then Cmd+V to paste</button>
+                        <span style={{ fontSize: '11px', color: '#9C856A' }}>Add as many images as you like</span>
+                      </div>
+                      <input ref={fileRef} type="file" accept="image/*" multiple onChange={handleFileChange} style={{ display: 'none' }} />
+                    </div>
                   </div>
                   <div style={{ display: 'flex', gap: '10px' }}>
-                    <button onClick={saveArticle} style={{ background: '#C8903A', border: 'none', borderRadius: '8px', padding: '8px 18px', fontSize: '13px', fontWeight: 600, color: 'white', cursor: 'pointer' }}>Save Article</button>
-                    <button onClick={() => setShowAddArticle(false)} style={{ background: 'transparent', border: '1px solid #C8B89A', borderRadius: '8px', padding: '8px 18px', fontSize: '13px', fontWeight: 600, color: '#9C856A', cursor: 'pointer' }}>Cancel</button>
+                    <button onClick={saveArticle} style={{ background: '#C8903A', border: 'none', borderRadius: '8px', padding: '8px 18px', fontSize: '13px', fontWeight: 600, color: 'white', cursor: 'pointer' }}>{saving ? 'Saving...' : 'Save Article'}</button>
+                    <button onClick={() => { setShowAddArticle(false); setImageFiles([]); setImagePreviews([]) }} style={{ background: 'transparent', border: '1px solid #C8B89A', borderRadius: '8px', padding: '8px 18px', fontSize: '13px', fontWeight: 600, color: '#9C856A', cursor: 'pointer' }}>Cancel</button>
                   </div>
                 </div>
               )}
@@ -172,6 +242,7 @@ function Education() {
                           {article.date_read && <span style={{ fontSize: '10px', color: '#9C856A', fontFamily: 'JetBrains Mono, monospace' }}>{article.date_read}</span>}
                           {article.url && <span style={{ fontSize: '10px', color: '#C8903A' }}>has link</span>}
                           {article.notes && <span style={{ fontSize: '10px', color: '#9C856A' }}>has content</span>}
+                          {article.image_urls?.length > 0 && <span style={{ fontSize: '10px', color: '#5A90CA' }}>{article.image_urls.length} image{article.image_urls.length > 1 ? 's' : ''}</span>}
                           {article.tags?.map(tag => (
                             <span key={tag} style={{ fontSize: '10px', fontWeight: 600, padding: '1px 7px', borderRadius: '99px', background: '#F5E6C8', color: '#7A4F1A', border: '1px solid #C8903A' }}>{tag}</span>
                           ))}
@@ -182,12 +253,22 @@ function Education() {
                     {expandedArticle === article.id && (
                       <div style={{ borderTop: '1px solid #C8B89A', padding: '14px', background: '#F5EFE4' }}>
                         {article.url && (
-                          <a href={article.url} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#C8903A', textDecoration: 'none', fontWeight: 600, marginBottom: article.notes ? '10px' : '0' }}>
+                          <a href={article.url} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#C8903A', textDecoration: 'none', fontWeight: 600, marginBottom: '10px', display: 'block' }}>
                             Open original article ↗
                           </a>
                         )}
                         {article.notes && (
-                          <div style={{ fontSize: '13px', color: '#2B2318', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{article.notes}</div>
+                          <div style={{ fontSize: '13px', color: '#2B2318', lineHeight: 1.7, whiteSpace: 'pre-wrap', marginBottom: article.image_urls?.length > 0 ? '14px' : '0' }}>{article.notes}</div>
+                        )}
+                        {article.image_urls?.length > 0 && (
+                          <div>
+                            <div style={{ fontSize: '10px', fontWeight: 700, color: '#9C856A', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '8px' }}>Images</div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                              {article.image_urls.map((url, i) => (
+                                <img key={i} src={url} style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '8px', border: '1px solid #C8B89A', objectFit: 'contain', cursor: 'pointer' }} onClick={() => window.open(url, '_blank')} />
+                              ))}
+                            </div>
+                          </div>
                         )}
                       </div>
                     )}
