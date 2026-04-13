@@ -8,6 +8,7 @@ function Sidebar({ activePage, setActivePage }) {
     { id: 'tasks', label: 'Tasks', section: 'trading' },
     { id: 'weekly', label: 'Old Positions', section: 'review' },
     { id: 'analytics', label: 'Analytics', section: 'review' },
+    { id: 'education', label: 'Education', section: 'review' },
   ]
   const sections = ['overview', 'trading', 'review']
   return (
