@@ -62,13 +62,45 @@ function WeeklyReview() {
       }
     }
     if (selectedType === 'trade') {
-      await supabase.from('trades').update({ notes: (selected.notes ? selected.notes + '\n\nREVIEW: ' : 'REVIEW: ') + review }).eq('id', selected.id)
+      const newNotes = (selected.notes ? selected.notes + '\n\nREVIEW: ' : 'REVIEW: ') + review
+      await supabase.from('trades').update({ notes: newNotes }).eq('id', selected.id)
+      const updated = { ...selected, notes: newNotes }
+      setSelected(updated)
+      setTrades(trades.map(t => t.id === selected.id ? updated : t))
     } else {
       const data = JSON.parse(selected.content || '{}')
-      await supabase.from('journal_entries').update({ content: JSON.stringify({ ...data, review, review_chart_url }) }).eq('id', selected.id)
+      const newContent = JSON.stringify({ ...data, review, review_chart_url })
+      await supabase.from('journal_entries').update({ content: newContent }).eq('id', selected.id)
+      const updated = { ...selected, content: newContent }
+      setSelected(updated)
+      setPositions(positions.map(p => p.id === selected.id ? updated : p))
     }
     setSavedReview(review)
     setSaving(false)
+  }
+
+  const removeReview = async () => {
+    if (!selected) return
+    if (selectedType === 'trade') {
+      const newNotes = selected.notes ? selected.notes.replace(/\n\nREVIEW:.*$/s, '').replace(/^REVIEW:.*$/s, '') : ''
+      await supabase.from('trades').update({ notes: newNotes }).eq('id', selected.id)
+      const updated = { ...selected, notes: newNotes }
+      setSelected(updated)
+      setTrades(trades.map(t => t.id === selected.id ? updated : t))
+    } else {
+      const data = JSON.parse(selected.content || '{}')
+      delete data.review
+      delete data.review_chart_url
+      const newContent = JSON.stringify(data)
+      await supabase.from('journal_entries').update({ content: newContent }).eq('id', selected.id)
+      const updated = { ...selected, content: newContent }
+      setSelected(updated)
+      setPositions(positions.map(p => p.id === selected.id ? updated : p))
+    }
+    setReview('')
+    setSavedReview('')
+    setChartFile(null)
+    setChartPreview(null)
   }
 
   const input = { background: '#F5EFE4', border: '1px solid #C8B89A', borderRadius: '8px', padding: '8px 12px', fontSize: '13px', color: '#2B2318', width: '100%', outline: 'none', fontFamily: 'DM Sans, sans-serif' }
@@ -149,6 +181,13 @@ function WeeklyReview() {
     }
   }
 
+  const hasReview = () => {
+    if (!selected) return false
+    if (selectedType === 'trade') return selected.notes?.includes('REVIEW:')
+    const data = JSON.parse(selected.content || '{}')
+    return !!data.review
+  }
+
   return (
     <div style={{ display: 'flex', height: '100vh', flexDirection: 'column' }}>
       <div style={{ background: '#EDE4D3', borderBottom: '1px solid #C8B89A', padding: '14px 24px' }}>
@@ -184,9 +223,9 @@ function WeeklyReview() {
                     <div>
                       <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '8px' }}>
                         <button type="button" onClick={() => fileRef.current.click()} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', color: '#5A4535', cursor: 'pointer', fontWeight: 600 }}>Browse file</button>
-                        <button type="button" onClick={() => pasteRef.current.focus()} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', color: '#5A4535', cursor: 'pointer', fontWeight: 600 }}>Click then Cmd+V to paste</button>
+                        <button type="button" onClick={() => pasteRef.current.focus()} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', color: '#5A4535', cursor: 'pointer', fontWeight: 600 }}>Click then Ctrl+V to paste</button>
                       </div>
-                      <div style={{ fontSize: '11px', color: '#C8B89A' }}>Copy chart in TradingView then press Cmd+V</div>
+                      <div style={{ fontSize: '11px', color: '#C8B89A' }}>Copy chart in TradingView then press Ctrl+V</div>
                     </div>
                   )}
                   <input ref={fileRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
@@ -195,6 +234,7 @@ function WeeklyReview() {
               </div>
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                 <button onClick={saveReview} style={{ background: '#C8903A', border: 'none', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: 600, color: 'white', cursor: 'pointer' }}>{saving ? 'Saving...' : 'Save Review'}</button>
+                {hasReview() && <button onClick={removeReview} style={{ background: 'transparent', border: '1px solid #9B3A28', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: 600, color: '#9B3A28', cursor: 'pointer' }}>Remove Review</button>}
                 {savedReview && <span style={{ fontSize: '12px', color: '#3D7A52', fontWeight: 600 }}>Saved!</span>}
               </div>
             </>
