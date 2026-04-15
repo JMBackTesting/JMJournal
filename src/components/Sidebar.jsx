@@ -9,6 +9,7 @@ function Sidebar({ activePage, setActivePage }) {
     { id: 'weekly', label: 'Old Positions', section: 'review' },
     { id: 'analytics', label: 'Analytics', section: 'review' },
     { id: 'education', label: 'Education', section: 'review' },
+    { id: 'export', label: 'Export Data', section: 'review' },
   ]
   const sections = ['overview', 'trading', 'review']
   return (
