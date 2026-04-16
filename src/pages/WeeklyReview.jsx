@@ -103,6 +103,13 @@ function WeeklyReview() {
     setChartPreview(null)
   }
 
+  const hasReview = () => {
+    if (!selected) return false
+    if (selectedType === 'trade') return selected.notes?.includes('REVIEW:')
+    const data = JSON.parse(selected.content || '{}')
+    return !!data.review
+  }
+
   const input = { background: '#F5EFE4', border: '1px solid #C8B89A', borderRadius: '8px', padding: '8px 12px', fontSize: '13px', color: '#2B2318', width: '100%', outline: 'none', fontFamily: 'DM Sans, sans-serif' }
 
   const renderTradeRow = (t) => (
@@ -181,13 +188,6 @@ function WeeklyReview() {
     }
   }
 
-  const hasReview = () => {
-    if (!selected) return false
-    if (selectedType === 'trade') return selected.notes?.includes('REVIEW:')
-    const data = JSON.parse(selected.content || '{}')
-    return !!data.review
-  }
-
   return (
     <div style={{ display: 'flex', height: '100vh', flexDirection: 'column' }}>
       <div style={{ background: '#EDE4D3', borderBottom: '1px solid #C8B89A', padding: '14px 24px' }}>
@@ -223,9 +223,9 @@ function WeeklyReview() {
                     <div>
                       <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '8px' }}>
                         <button type="button" onClick={() => fileRef.current.click()} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', color: '#5A4535', cursor: 'pointer', fontWeight: 600 }}>Browse file</button>
-                        <button type="button" onClick={() => pasteRef.current.focus()} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', color: '#5A4535', cursor: 'pointer', fontWeight: 600 }}>Click then Ctrl+V to paste</button>
+                        <button type="button" onClick={() => pasteRef.current.focus()} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', color: '#5A4535', cursor: 'pointer', fontWeight: 600 }}>Click then Cmd+V to paste</button>
                       </div>
-                      <div style={{ fontSize: '11px', color: '#C8B89A' }}>Copy chart in TradingView then press Ctrl+V</div>
+                      <div style={{ fontSize: '11px', color: '#C8B89A' }}>Copy chart in TradingView then press Cmd+V</div>
                     </div>
                   )}
                   <input ref={fileRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
