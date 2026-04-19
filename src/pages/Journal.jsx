@@ -83,6 +83,16 @@ function Journal() {
     fetchEntries()
   }
 
+  const reopenPosition = async (entry) => {
+    const data = JSON.parse(entry.content || '{}')
+    await supabase.from('journal_entries').update({
+      content: JSON.stringify({ ...data, status: 'Active' }),
+      mood: 'Active',
+      tags: [...(entry.tags || []).filter(t => t !== 'Closed'), 'Active']
+    }).eq('id', entry.id)
+    fetchEntries()
+  }
+
   const deleteEntry = async (id, content) => {
     const data = JSON.parse(content || '{}')
     if (data.chart_url) {
@@ -189,6 +199,9 @@ function Journal() {
               {entry.mood !== 'Closed' && (
                 <button onClick={() => closePosition(entry)} style={{ background: '#3D7A52', border: 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '12px', fontWeight: 600, color: 'white', cursor: 'pointer' }}>Mark as Closed</button>
               )}
+              {entry.mood === 'Closed' && (
+                <button onClick={() => reopenPosition(entry)} style={{ background: '#C8903A', border: 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '12px', fontWeight: 600, color: 'white', cursor: 'pointer' }}>Reopen Position</button>
+              )}
               <button onClick={() => deleteEntry(entry.id, entry.content)} style={{ background: 'transparent', border: '1px solid #C8B89A', borderRadius: '8px', padding: '8px 16px', fontSize: '12px', fontWeight: 600, color: '#9C856A', cursor: 'pointer' }}>Delete</button>
             </div>
           </div>
@@ -255,9 +268,9 @@ function Journal() {
                   <div>
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '8px' }}>
                       <button type="button" onClick={() => fileRef.current.click()} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', color: '#5A4535', cursor: 'pointer', fontWeight: 600 }}>Browse file</button>
-                      <button type="button" onClick={() => pasteRef.current.focus()} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', color: '#5A4535', cursor: 'pointer', fontWeight: 600 }}>Click then Cmd+V to paste</button>
+                      <button type="button" onClick={() => pasteRef.current.focus()} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', color: '#5A4535', cursor: 'pointer', fontWeight: 600 }}>Click then Ctrl+V to paste</button>
                     </div>
-                    <div style={{ fontSize: '11px', color: '#C8B89A' }}>Copy chart in TradingView then press Cmd+V</div>
+                    <div style={{ fontSize: '11px', color: '#C8B89A' }}>Copy chart in TradingView then press Ctrl+V</div>
                   </div>
                 )}
                 <input ref={fileRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
