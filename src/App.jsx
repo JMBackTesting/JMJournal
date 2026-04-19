@@ -10,6 +10,7 @@ import Analytics from './pages/Analytics'
 import SpotBuys from './pages/SpotBuys'
 import Education from './pages/Education'
 import Export from './pages/Export'
+import Settings from './pages/Settings'
 
 function App() {
   const [activePage, setActivePage] = useState('dashboard')
@@ -27,6 +28,7 @@ function App() {
         {activePage === 'spotbuys' && <SpotBuys />}
         {activePage === 'education' && <Education />}
         {activePage === 'export' && <Export />}
+        {activePage === 'settings' && <Settings />}
       </main>
     </div>
   )

@@ -18,28 +18,33 @@ function calcWeightedR(side, entry, stop, partials) {
   if (!e || !s) return null
   const risk = side === 'LONG' ? e - s : s - e
   if (risk <= 0) return null
-  let totalSize = 0
-  let weightedR = 0
+  let totalSize = 0, weightedR = 0
   for (const p of partials) {
-    const size = parseFloat(p.size)
-    const exit = parseFloat(p.exit_price)
+    const size = parseFloat(p.size), exit = parseFloat(p.exit_price)
     if (!size || !exit) continue
     const reward = side === 'LONG' ? exit - e : e - exit
-    const r = reward / risk
-    weightedR += (size / 100) * r
+    weightedR += (size / 100) * (reward / risk)
     totalSize += size
   }
   if (totalSize === 0) return null
   return weightedR.toFixed(2)
 }
 
+const emptyForm = {
+  pair: 'BTC/USDT', side: 'LONG', entry_price: '', exit_price: '', stop_price: '',
+  pnl_r: '', pnl_usd: '', notes: '', emotion: '', setup: '', mistake: '',
+  date: new Date().toISOString().split('T')[0]
+}
+
 function TradeLog() {
   const [trades, setTrades] = useState([])
   const [showing, setShowing] = useState(false)
   const [expandedTrade, setExpandedTrade] = useState(null)
+  const [editingTrade, setEditingTrade] = useState(null)
+  const [editForm, setEditForm] = useState({})
   const [partialForms, setPartialForms] = useState({})
   const [showPartialForm, setShowPartialForm] = useState({})
-  const [form, setForm] = useState({ pair: 'BTC/USDT', side: 'LONG', entry_price: '', exit_price: '', stop_price: '', pnl_r: '', notes: '', date: new Date().toISOString().split('T')[0] })
+  const [form, setForm] = useState(emptyForm)
 
   useEffect(() => { fetchTrades() }, [])
 
@@ -58,18 +63,52 @@ function TradeLog() {
   const saveTrade = async () => {
     if (!form.pair || !form.side) return
     await supabase.from('trades').insert([{
-      pair: form.pair,
-      side: form.side,
+      pair: form.pair, side: form.side,
       entry_price: parseFloat(form.entry_price) || null,
       exit_price: parseFloat(form.exit_price) || null,
       stop_price: parseFloat(form.stop_price) || null,
       pnl_r: parseFloat(form.pnl_r) || 0,
+      pnl_usd: parseFloat(form.pnl_usd) || null,
       notes: form.notes,
+      emotion: form.emotion || null,
+      setup: form.setup || null,
+      mistake: form.mistake || null,
       date: form.date,
       partials: []
     }])
-    setForm({ pair: 'BTC/USDT', side: 'LONG', entry_price: '', exit_price: '', stop_price: '', pnl_r: '', notes: '', date: new Date().toISOString().split('T')[0] })
+    setForm(emptyForm)
     setShowing(false)
+    fetchTrades()
+  }
+
+  const startEdit = (t) => {
+    setEditingTrade(t.id)
+    setEditForm({
+      pnl_r: t.pnl_r ?? '',
+      pnl_usd: t.pnl_usd ?? '',
+      entry_price: t.entry_price ?? '',
+      stop_price: t.stop_price ?? '',
+      exit_price: t.exit_price ?? '',
+      notes: t.notes ?? '',
+      emotion: t.emotion ?? '',
+      setup: t.setup ?? '',
+      mistake: t.mistake ?? '',
+    })
+  }
+
+  const saveEdit = async (trade) => {
+    await supabase.from('trades').update({
+      pnl_r: parseFloat(editForm.pnl_r) || 0,
+      pnl_usd: parseFloat(editForm.pnl_usd) || null,
+      entry_price: parseFloat(editForm.entry_price) || null,
+      stop_price: parseFloat(editForm.stop_price) || null,
+      exit_price: parseFloat(editForm.exit_price) || null,
+      notes: editForm.notes,
+      emotion: editForm.emotion || null,
+      setup: editForm.setup || null,
+      mistake: editForm.mistake || null,
+    }).eq('id', trade.id)
+    setEditingTrade(null)
     fetchTrades()
   }
 
@@ -82,12 +121,7 @@ function TradeLog() {
     const pForm = partialForms[trade.id] || {}
     if (!pForm.size || !pForm.exit_price) return
     const existing = trade.partials || []
-    const newPartials = [...existing, {
-      size: parseFloat(pForm.size),
-      exit_price: parseFloat(pForm.exit_price),
-      note: pForm.note || '',
-      date: new Date().toISOString().split('T')[0]
-    }]
+    const newPartials = [...existing, { size: parseFloat(pForm.size), exit_price: parseFloat(pForm.exit_price), note: pForm.note || '', date: new Date().toISOString().split('T')[0] }]
     const weighted = calcWeightedR(trade.side, trade.entry_price, trade.stop_price, newPartials)
     const updates = { partials: newPartials }
     if (weighted !== null) updates.pnl_r = parseFloat(weighted)
@@ -130,9 +164,7 @@ function TradeLog() {
                 <select value={PAIRS.includes(form.pair) ? form.pair : 'Other'} onChange={e => updateForm('pair', e.target.value === 'Other' ? '' : e.target.value)} style={input}>
                   {PAIRS.map(p => <option key={p}>{p}</option>)}
                 </select>
-                {(!PAIRS.includes(form.pair) || form.pair === '') && (
-                  <input type="text" placeholder="Type ticker e.g. PEPE/USDT" value={form.pair} onChange={e => updateForm('pair', e.target.value)} style={{ ...input, marginTop: '6px' }} />
-                )}
+                {(!PAIRS.includes(form.pair) || form.pair === '') && <input type="text" placeholder="Type ticker e.g. PEPE/USDT" value={form.pair} onChange={e => updateForm('pair', e.target.value)} style={{ ...input, marginTop: '6px' }} />}
               </div>
               <div><label style={label}>Side</label><select value={form.side} onChange={e => updateForm('side', e.target.value)} style={input}><option>LONG</option><option>SHORT</option></select></div>
               <div><label style={label}>Date</label><input type="date" value={form.date} onChange={e => updateForm('date', e.target.value)} style={input} /></div>
@@ -146,9 +178,45 @@ function TradeLog() {
                 {autoR !== '' ? (parseFloat(autoR) > 0 ? '+' : '') + autoR + 'R' : '— fill in prices above'}
               </span>
             </div>
-            <div style={{ marginBottom: '12px' }}>
-              <label style={label}>Notes</label>
-              <textarea placeholder="What happened? Why did you take this trade?" value={form.notes} onChange={e => updateForm('notes', e.target.value)} style={{ ...input, height: '80px', resize: 'vertical' }} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+              <div>
+                <label style={label}>$ P&L</label>
+                <input type="number" placeholder="e.g. 250 or -120" value={form.pnl_usd} onChange={e => updateForm('pnl_usd', e.target.value)} style={input} />
+                <div style={{ fontSize: '10px', color: '#9C856A', marginTop: '3px' }}>Actual dollar profit/loss</div>
+              </div>
+              <div>
+                <label style={label}>Notes</label>
+                <textarea placeholder="What happened? Why did you take this trade?" value={form.notes} onChange={e => updateForm('notes', e.target.value)} style={{ ...input, height: '60px', resize: 'vertical' }} />
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+              <div>
+                <label style={label}>Emotion</label>
+                <select value={form.emotion} onChange={e => updateForm('emotion', e.target.value)} style={input}>
+                  <option value="">Select...</option>
+                  <option>Calm</option><option>Confident</option><option>Anxious</option>
+                  <option>FOMO</option><option>Revenge</option><option>Bored</option>
+                  <option>Frustrated</option><option>Overconfident</option>
+                </select>
+              </div>
+              <div>
+                <label style={label}>Setup</label>
+                <select value={form.setup} onChange={e => updateForm('setup', e.target.value)} style={input}>
+                  <option value="">Select...</option>
+                  <option>Breakout</option><option>Retest</option><option>Reversal</option>
+                  <option>Range</option><option>Trend Follow</option><option>Liquidity Grab</option>
+                  <option>News</option><option>Other</option>
+                </select>
+              </div>
+              <div>
+                <label style={label}>Mistake</label>
+                <select value={form.mistake} onChange={e => updateForm('mistake', e.target.value)} style={input}>
+                  <option value="">None</option>
+                  <option>Early Entry</option><option>Late Entry</option><option>Wrong Size</option>
+                  <option>Moved Stop</option><option>No Plan</option><option>Overtraded</option>
+                  <option>Chased</option><option>Ignored Signal</option>
+                </select>
+              </div>
             </div>
             <div style={{ display: 'flex', gap: '10px' }}>
               <button onClick={saveTrade} style={{ background: '#C8903A', border: 'none', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: 600, color: 'white', cursor: 'pointer' }}>Save Trade</button>
@@ -161,31 +229,36 @@ function TradeLog() {
           {trades.length === 0 && <div style={{ padding: '24px', fontSize: '13px', color: '#9C856A' }}>No trades logged yet.</div>}
           {trades.map((t, i) => {
             const isExpanded = expandedTrade === t.id
+            const isEditing = editingTrade === t.id
             const partials = t.partials || []
             const pForm = partialForms[t.id] || {}
             const showPForm = showPartialForm[t.id] || false
             return (
               <div key={t.id} style={{ borderBottom: i < trades.length - 1 ? '1px solid #C8B89A' : 'none' }}>
-                <div onClick={() => setExpandedTrade(isExpanded ? null : t.id)} style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr auto auto auto', gap: '12px', alignItems: 'center', padding: '12px 18px', background: i % 2 === 0 ? '#EDE4D3' : '#E8DEC8', cursor: 'pointer' }}>
+                <div onClick={() => { if (!isEditing) setExpandedTrade(isExpanded ? null : t.id) }} style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr auto auto auto auto', gap: '12px', alignItems: 'center', padding: '12px 18px', background: i % 2 === 0 ? '#EDE4D3' : '#E8DEC8', cursor: 'pointer' }}>
                   <span style={{ fontSize: '10px', fontWeight: 700, padding: '3px 8px', borderRadius: '5px', background: t.side === 'LONG' ? '#D4EAD8' : '#F5DACE', color: t.side === 'LONG' ? '#2A5E38' : '#7A2E18' }}>{t.side}</span>
                   <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', fontWeight: 600, color: '#2B2318', minWidth: '80px' }}>{t.pair}</div>
-                  <div style={{ fontSize: '12px', color: '#9C856A' }}>{t.notes || '—'}</div>
-                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '11px', color: '#9C856A' }}>{t.date}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '14px', fontWeight: 700, color: t.pnl_r >= 0 ? '#3D7A52' : '#9B3A28', minWidth: '52px', textAlign: 'right' }}>{t.pnl_r > 0 ? '+' : ''}{t.pnl_r}R</div>
-                    {partials.length > 0 && <span style={{ fontSize: '10px', background: '#F5E6C8', color: '#7A4F1A', padding: '1px 6px', borderRadius: '99px', border: '1px solid #C8903A', fontWeight: 700 }}>{partials.length} partial{partials.length > 1 ? 's' : ''}</span>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <div style={{ fontSize: '12px', color: '#9C856A' }}>{t.notes || '—'}</div>
+                    {t.emotion && <span style={{ fontSize: '10px', background: '#F5EFE4', border: '1px solid #C8B89A', borderRadius: '99px', padding: '1px 7px', color: '#5A4535' }}>{t.emotion}</span>}
+                    {t.setup && <span style={{ fontSize: '10px', background: '#F5E6C8', border: '1px solid #C8903A', borderRadius: '99px', padding: '1px 7px', color: '#7A4F1A' }}>{t.setup}</span>}
+                    {t.mistake && <span style={{ fontSize: '10px', background: '#F5DACE', border: '1px solid #C87055', borderRadius: '99px', padding: '1px 7px', color: '#7A2E18' }}>{t.mistake}</span>}
                   </div>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '11px', color: '#9C856A' }}>{t.date}</div>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '13px', fontWeight: 700, color: t.pnl_r >= 0 ? '#3D7A52' : '#9B3A28', minWidth: '45px', textAlign: 'right' }}>{t.pnl_r > 0 ? '+' : ''}{t.pnl_r}R</div>
+                  {t.pnl_usd != null && <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '13px', fontWeight: 700, color: t.pnl_usd >= 0 ? '#3D7A52' : '#9B3A28', minWidth: '60px', textAlign: 'right' }}>{t.pnl_usd > 0 ? '+$' : '-$'}{Math.abs(t.pnl_usd).toFixed(0)}</div>}
                   <button onClick={e => { e.stopPropagation(); deleteTrade(t.id) }} style={{ background: 'transparent', border: 'none', color: '#C8B89A', cursor: 'pointer', fontSize: '16px', padding: '0 4px' }}>x</button>
                 </div>
 
-                {isExpanded && (
+                {isExpanded && !isEditing && (
                   <div style={{ background: '#F5EFE4', borderTop: '1px solid #C8B89A', padding: '16px 18px' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '16px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginBottom: '16px' }}>
                       {[
                         { label: 'Entry', value: t.entry_price },
                         { label: 'Stop', value: t.stop_price },
                         { label: 'Exit', value: t.exit_price },
-                        { label: 'Overall R', value: (t.pnl_r > 0 ? '+' : '') + t.pnl_r + 'R', color: t.pnl_r >= 0 ? '#3D7A52' : '#9B3A28' },
+                        { label: 'R', value: (t.pnl_r > 0 ? '+' : '') + t.pnl_r + 'R', color: t.pnl_r >= 0 ? '#3D7A52' : '#9B3A28' },
+                        { label: '$ P&L', value: t.pnl_usd != null ? (t.pnl_usd > 0 ? '+$' : '-$') + Math.abs(t.pnl_usd).toFixed(2) : '—', color: t.pnl_usd != null ? (t.pnl_usd >= 0 ? '#3D7A52' : '#9B3A28') : '#9C856A' },
                       ].map(s => (
                         <div key={s.label} style={{ background: '#EDE4D3', borderRadius: '8px', padding: '10px 12px', border: '1px solid #C8B89A' }}>
                           <div style={{ fontSize: '10px', color: '#9C856A', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>{s.label}</div>
@@ -193,6 +266,14 @@ function TradeLog() {
                         </div>
                       ))}
                     </div>
+
+                    {(t.emotion || t.setup || t.mistake) && (
+                      <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                        {t.emotion && <div style={{ background: '#F5EFE4', border: '1px solid #C8B89A', borderRadius: '8px', padding: '6px 12px', fontSize: '12px', color: '#5A4535' }}><span style={{ fontWeight: 700, color: '#9C856A', fontSize: '10px', textTransform: 'uppercase', marginRight: '6px' }}>Emotion</span>{t.emotion}</div>}
+                        {t.setup && <div style={{ background: '#F5E6C8', border: '1px solid #C8903A', borderRadius: '8px', padding: '6px 12px', fontSize: '12px', color: '#7A4F1A' }}><span style={{ fontWeight: 700, fontSize: '10px', textTransform: 'uppercase', marginRight: '6px' }}>Setup</span>{t.setup}</div>}
+                        {t.mistake && <div style={{ background: '#F5DACE', border: '1px solid #C87055', borderRadius: '8px', padding: '6px 12px', fontSize: '12px', color: '#7A2E18' }}><span style={{ fontWeight: 700, fontSize: '10px', textTransform: 'uppercase', marginRight: '6px' }}>Mistake</span>{t.mistake}</div>}
+                      </div>
+                    )}
 
                     {partials.length > 0 && (
                       <div style={{ marginBottom: '14px' }}>
@@ -209,34 +290,73 @@ function TradeLog() {
                       </div>
                     )}
 
-                    {showPForm ? (
-                      <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '10px', padding: '14px', marginBottom: '10px' }}>
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: showPForm ? '14px' : '0' }}>
+                      <button onClick={() => { startEdit(t) }} style={{ background: 'transparent', border: '1px solid #C8B89A', borderRadius: '8px', padding: '7px 16px', fontSize: '12px', fontWeight: 600, color: '#5A4535', cursor: 'pointer' }}>✏️ Edit Trade</button>
+                      {!showPForm && <button onClick={() => setShowPartialForm(prev => ({ ...prev, [t.id]: true }))} style={{ background: 'transparent', border: '1px solid #C8903A', borderRadius: '8px', padding: '7px 16px', fontSize: '12px', fontWeight: 600, color: '#C8903A', cursor: 'pointer' }}>+ Add Partial</button>}
+                    </div>
+
+                    {showPForm && (
+                      <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '10px', padding: '14px', marginTop: '10px' }}>
                         <div style={{ fontSize: '11px', fontWeight: 700, color: '#9C856A', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>Add Partial Exit</div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                          <div>
-                            <label style={label}>Size %</label>
-                            <input type="number" placeholder="e.g. 20" value={pForm.size || ''} onChange={e => setPartialForms(prev => ({ ...prev, [t.id]: { ...pForm, size: e.target.value } }))} style={input} />
-                          </div>
-                          <div>
-                            <label style={label}>Exit Price</label>
-                            <input type="number" placeholder="0.00" value={pForm.exit_price || ''} onChange={e => setPartialForms(prev => ({ ...prev, [t.id]: { ...pForm, exit_price: e.target.value } }))} style={input} />
-                          </div>
-                          <div>
-                            <label style={label}>Note (optional)</label>
-                            <input type="text" placeholder="e.g. took profit at S/R" value={pForm.note || ''} onChange={e => setPartialForms(prev => ({ ...prev, [t.id]: { ...pForm, note: e.target.value } }))} style={input} />
-                          </div>
+                          <div><label style={label}>Size %</label><input type="number" placeholder="e.g. 20" value={pForm.size || ''} onChange={e => setPartialForms(prev => ({ ...prev, [t.id]: { ...pForm, size: e.target.value } }))} style={input} /></div>
+                          <div><label style={label}>Exit Price</label><input type="number" placeholder="0.00" value={pForm.exit_price || ''} onChange={e => setPartialForms(prev => ({ ...prev, [t.id]: { ...pForm, exit_price: e.target.value } }))} style={input} /></div>
+                          <div><label style={label}>Note (optional)</label><input type="text" placeholder="e.g. took profit at S/R" value={pForm.note || ''} onChange={e => setPartialForms(prev => ({ ...prev, [t.id]: { ...pForm, note: e.target.value } }))} style={input} /></div>
                         </div>
-                        <div style={{ fontSize: '11px', color: '#9C856A', marginBottom: '10px' }}>
-                          Stop loss used for R calc: <strong>{t.stop_price || 'not set'}</strong>
-                        </div>
+                        <div style={{ fontSize: '11px', color: '#9C856A', marginBottom: '10px' }}>Stop loss used for R calc: <strong>{t.stop_price || 'not set'}</strong></div>
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <button onClick={() => addPartial(t)} style={{ background: '#C8903A', border: 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', fontWeight: 600, color: 'white', cursor: 'pointer' }}>Save Partial</button>
                           <button onClick={() => setShowPartialForm(prev => ({ ...prev, [t.id]: false }))} style={{ background: 'transparent', border: '1px solid #C8B89A', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', fontWeight: 600, color: '#9C856A', cursor: 'pointer' }}>Cancel</button>
                         </div>
                       </div>
-                    ) : (
-                      <button onClick={() => setShowPartialForm(prev => ({ ...prev, [t.id]: true }))} style={{ background: 'transparent', border: '1px solid #C8903A', borderRadius: '8px', padding: '7px 16px', fontSize: '12px', fontWeight: 600, color: '#C8903A', cursor: 'pointer' }}>+ Add Partial</button>
                     )}
+                  </div>
+                )}
+
+                {isEditing && (
+                  <div style={{ background: '#F5EFE4', borderTop: '1px solid #C8B89A', padding: '16px 18px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#9C856A', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '14px' }}>Edit Trade</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '12px' }}>
+                      <div><label style={label}>Entry Price</label><input type="number" value={editForm.entry_price} onChange={e => setEditForm({ ...editForm, entry_price: e.target.value })} style={input} /></div>
+                      <div><label style={label}>Stop Loss</label><input type="number" value={editForm.stop_price} onChange={e => setEditForm({ ...editForm, stop_price: e.target.value })} style={input} /></div>
+                      <div><label style={label}>Exit Price</label><input type="number" value={editForm.exit_price} onChange={e => setEditForm({ ...editForm, exit_price: e.target.value })} style={input} /></div>
+                      <div><label style={label}>R P&L</label><input type="number" value={editForm.pnl_r} onChange={e => setEditForm({ ...editForm, pnl_r: e.target.value })} style={input} /></div>
+                      <div><label style={label}>$ P&L</label><input type="number" placeholder="e.g. 250 or -120" value={editForm.pnl_usd} onChange={e => setEditForm({ ...editForm, pnl_usd: e.target.value })} style={input} /></div>
+                      <div><label style={label}>Notes</label><input type="text" value={editForm.notes} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} style={input} /></div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                      <div>
+                        <label style={label}>Emotion</label>
+                        <select value={editForm.emotion} onChange={e => setEditForm({ ...editForm, emotion: e.target.value })} style={input}>
+                          <option value="">Select...</option>
+                          <option>Calm</option><option>Confident</option><option>Anxious</option>
+                          <option>FOMO</option><option>Revenge</option><option>Bored</option>
+                          <option>Frustrated</option><option>Overconfident</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={label}>Setup</label>
+                        <select value={editForm.setup} onChange={e => setEditForm({ ...editForm, setup: e.target.value })} style={input}>
+                          <option value="">Select...</option>
+                          <option>Breakout</option><option>Retest</option><option>Reversal</option>
+                          <option>Range</option><option>Trend Follow</option><option>Liquidity Grab</option>
+                          <option>News</option><option>Other</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={label}>Mistake</label>
+                        <select value={editForm.mistake} onChange={e => setEditForm({ ...editForm, mistake: e.target.value })} style={input}>
+                          <option value="">None</option>
+                          <option>Early Entry</option><option>Late Entry</option><option>Wrong Size</option>
+                          <option>Moved Stop</option><option>No Plan</option><option>Overtraded</option>
+                          <option>Chased</option><option>Ignored Signal</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button onClick={() => saveEdit(t)} style={{ background: '#C8903A', border: 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', fontWeight: 600, color: 'white', cursor: 'pointer' }}>Save Changes</button>
+                      <button onClick={() => setEditingTrade(null)} style={{ background: 'transparent', border: '1px solid #C8B89A', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', fontWeight: 600, color: '#9C856A', cursor: 'pointer' }}>Cancel</button>
+                    </div>
                   </div>
                 )}
               </div>
