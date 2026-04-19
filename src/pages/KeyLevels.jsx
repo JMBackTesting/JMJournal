@@ -64,9 +64,7 @@ function KeyLevels() {
         chart_url = urlData.publicUrl
       }
     }
-
     let payload = { tab: activeTab }
-
     if (activeTab === 'Comparison W1' || activeTab === 'Comparison M1') {
       payload.comparison_notes = form.comparison_notes
     } else if (activeTab === 'Daily') {
@@ -93,7 +91,6 @@ function KeyLevels() {
       payload.notes = form.notes
       payload.change_since = form.change_since
     }
-
     await supabase.from('key_levels').insert([{
       pair: finalPair,
       price: parseFloat(form.support || form.d1_support || 0) || 0,
@@ -143,9 +140,9 @@ function KeyLevels() {
           <div>
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '8px' }}>
               <button type="button" onClick={() => fileRef.current.click()} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', color: '#5A4535', cursor: 'pointer', fontWeight: 600 }}>Browse file</button>
-              <button type="button" onClick={() => pasteRef.current.focus()} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', color: '#5A4535', cursor: 'pointer', fontWeight: 600 }}>Click then Ctrl+V to paste</button>
+              <button type="button" onClick={() => pasteRef.current.focus()} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', color: '#5A4535', cursor: 'pointer', fontWeight: 600 }}>Click then Cmd+V to paste</button>
             </div>
-            <div style={{ fontSize: '11px', color: '#C8B89A' }}>Copy chart in TradingView then press Ctrl+V</div>
+            <div style={{ fontSize: '11px', color: '#C8B89A' }}>Copy chart in TradingView then press Cmd+V</div>
           </div>
         )}
         <input ref={fileRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
@@ -163,11 +160,7 @@ function KeyLevels() {
         <>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
             <div>
-              {field('Pair',
-                <select value={form.pair} onChange={e => setForm({ ...form, pair: e.target.value, customPair: '' })} style={input}>
-                  {PAIRS.map(p => <option key={p}>{p}</option>)}
-                </select>
-              )}
+              {field('Pair', <select value={form.pair} onChange={e => setForm({ ...form, pair: e.target.value, customPair: '' })} style={input}>{PAIRS.map(p => <option key={p}>{p}</option>)}</select>)}
               {form.pair === 'Other' && <input type="text" placeholder="e.g. PEPE/USDT" value={form.customPair} onChange={e => setForm({ ...form, customPair: e.target.value.toUpperCase() })} style={{ ...input, marginTop: '8px' }} />}
             </div>
             {field('Date', <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} style={input} />)}
@@ -181,11 +174,7 @@ function KeyLevels() {
         <>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
             <div>
-              {field('Pair',
-                <select value={form.pair} onChange={e => setForm({ ...form, pair: e.target.value, customPair: '' })} style={input}>
-                  {PAIRS.map(p => <option key={p}>{p}</option>)}
-                </select>
-              )}
+              {field('Pair', <select value={form.pair} onChange={e => setForm({ ...form, pair: e.target.value, customPair: '' })} style={input}>{PAIRS.map(p => <option key={p}>{p}</option>)}</select>)}
               {form.pair === 'Other' && <input type="text" placeholder="e.g. PEPE/USDT" value={form.customPair} onChange={e => setForm({ ...form, customPair: e.target.value.toUpperCase() })} style={{ ...input, marginTop: '8px' }} />}
             </div>
             {field('Date', <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} style={input} />)}
@@ -293,7 +282,6 @@ function KeyLevels() {
             <button onClick={() => deleteLevel(l.id, l.chart_url)} style={{ background: 'transparent', border: 'none', color: '#C8B89A', cursor: 'pointer', fontSize: '16px', padding: '0 4px' }}>x</button>
           </div>
         </div>
-
         <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {isComparison ? (
             <>
@@ -333,7 +321,6 @@ function KeyLevels() {
           <img src={expandedChart} style={{ maxWidth: '90%', maxHeight: '90%', borderRadius: '8px' }} />
         </div>
       )}
-
       <div style={{ background: '#EDE4D3', borderBottom: '1px solid #C8B89A', padding: '14px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <div style={{ fontFamily: 'Lora, serif', fontSize: '16px', fontWeight: 600, color: '#2B2318' }}>Key Levels</div>
@@ -341,20 +328,16 @@ function KeyLevels() {
         </div>
         <button onClick={() => setShowing(!showing)} style={{ background: '#C8903A', border: 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', fontWeight: 600, color: 'white', cursor: 'pointer' }}>+ Add Level</button>
       </div>
-
       <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <div style={{ display: 'flex', background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '10px', padding: '3px', width: 'fit-content', flexWrap: 'wrap', gap: '2px' }}>
           {TIMEFRAMES.map(tf => (
             <div key={tf} onClick={() => { setActiveTab(tf); setShowing(false); setForm(defaultForm) }} style={{ padding: '6px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', background: activeTab === tf ? '#F5EFE4' : 'transparent', color: activeTab === tf ? '#2B2318' : '#9C856A', border: activeTab === tf ? '1px solid #C8B89A' : '1px solid transparent', whiteSpace: 'nowrap' }}>{tf}</div>
           ))}
         </div>
-
         {showing && renderForm()}
-
         {filteredLevels.length === 0 && !showing && (
           <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '12px', padding: '24px', fontSize: '13px', color: '#9C856A' }}>No {activeTab.toLowerCase()} entries added yet.</div>
         )}
-
         {filteredLevels.map(renderLevel)}
       </div>
     </div>
