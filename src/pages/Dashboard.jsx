@@ -1,6 +1,53 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabase'
 
+function SessionCountdown() {
+  const [times, setTimes] = useState({})
+
+  const getSessions = () => {
+    const now = new Date()
+    const sessions = [
+      { name: 'London Open', hour: 8, minute: 0 },
+      { name: 'NY Open', hour: 13, minute: 30 },
+      { name: 'Asia Open', hour: 0, minute: 0 },
+    ]
+    return sessions.map(s => {
+      const next = new Date()
+      next.setUTCHours(s.hour, s.minute, 0, 0)
+      if (next <= now) next.setUTCDate(next.getUTCDate() + 1)
+      const diff = next - now
+      const h = Math.floor(diff / (1000 * 60 * 60))
+      const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+      const isActive = Math.abs(now.getUTCHours() * 60 + now.getUTCMinutes() - (s.hour * 60 + s.minute)) < 60
+      return { ...s, h, m, isActive }
+    })
+  }
+
+  useEffect(() => {
+    setTimes(getSessions())
+    const interval = setInterval(() => setTimes(getSessions()), 60000)
+    return () => clearInterval(interval)
+  }, [])
+
+  return (
+    <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '12px', padding: '14px 18px' }}>
+      <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9C856A', marginBottom: '12px' }}>Session Countdown (UTC)</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+        {(Array.isArray(times) ? times : []).map(s => (
+          <div key={s.name} style={{ background: s.isActive ? '#D4EAD8' : '#F5EFE4', border: s.isActive ? '1px solid #5DA070' : '1px solid #C8B89A', borderRadius: '8px', padding: '10px 14px' }}>
+            <div style={{ fontSize: '10px', fontWeight: 600, color: s.isActive ? '#2A5E38' : '#9C856A', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>{s.name}</div>
+            {s.isActive ? (
+              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '14px', fontWeight: 700, color: '#2A5E38' }}>OPEN NOW</div>
+            ) : (
+              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '16px', fontWeight: 700, color: '#2B2318' }}>{s.h}h {s.m}m</div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function Dashboard() {
   const [trades, setTrades] = useState([])
   const [allTrades, setAllTrades] = useState([])
@@ -70,7 +117,6 @@ function Dashboard() {
   const weeklyPnlUsd = allTrades.filter(t => t.date >= weekStart).reduce((sum, t) => sum + (t.pnl_usd || 0), 0)
   const monthlyPnlUsd = allTrades.filter(t => t.date?.startsWith(currentMonth)).reduce((sum, t) => sum + (t.pnl_usd || 0), 0)
   const yearlyPnlUsd = allTrades.filter(t => t.date?.startsWith(currentYear)).reduce((sum, t) => sum + (t.pnl_usd || 0), 0)
-
   const hasGoals = goalDaily > 0 || goalWeekly > 0 || goalMonthly > 0 || goalYearly > 0
 
   const GoalBar = ({ label, current, goal }) => {
@@ -109,42 +155,12 @@ function Dashboard() {
 
       <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-        {dailyBreached && (
-          <div style={{ background: '#F5DACE', border: '2px solid #9B3A28', borderRadius: '10px', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ fontSize: '20px' }}>🚨</div>
-            <div>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: '#6B1E12' }}>Daily Drawdown Limit Breached</div>
-              <div style={{ fontSize: '12px', color: '#9B3A28', marginTop: '2px' }}>You are down {Math.abs(todayPnlPct).toFixed(1)}% today — your limit is {dailyLimit}%. Consider stopping trading for the day.</div>
-            </div>
-          </div>
-        )}
-        {dailyWarning && (
-          <div style={{ background: '#F5E6C8', border: '2px solid #C8903A', borderRadius: '10px', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ fontSize: '20px' }}>⚠️</div>
-            <div>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: '#7A4F1A' }}>Approaching Daily Drawdown Limit</div>
-              <div style={{ fontSize: '12px', color: '#C8903A', marginTop: '2px' }}>You are down {Math.abs(todayPnlPct).toFixed(1)}% today — your limit is {dailyLimit}%. Trade carefully.</div>
-            </div>
-          </div>
-        )}
-        {maxBreached && (
-          <div style={{ background: '#F5DACE', border: '2px solid #9B3A28', borderRadius: '10px', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ fontSize: '20px' }}>🚨</div>
-            <div>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: '#6B1E12' }}>Max Drawdown Limit Breached</div>
-              <div style={{ fontSize: '12px', color: '#9B3A28', marginTop: '2px' }}>Your all-time drawdown is {maxDrawdownPct.toFixed(1)}% — your limit is {maxDrawdownLimit}%.</div>
-            </div>
-          </div>
-        )}
-        {maxWarning && (
-          <div style={{ background: '#F5E6C8', border: '2px solid #C8903A', borderRadius: '10px', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ fontSize: '20px' }}>⚠️</div>
-            <div>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: '#7A4F1A' }}>Approaching Max Drawdown Limit</div>
-              <div style={{ fontSize: '12px', color: '#C8903A', marginTop: '2px' }}>Your all-time drawdown is {maxDrawdownPct.toFixed(1)}% — your limit is {maxDrawdownLimit}%. Be cautious.</div>
-            </div>
-          </div>
-        )}
+        {dailyBreached && <div style={{ background: '#F5DACE', border: '2px solid #9B3A28', borderRadius: '10px', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: '12px' }}><div style={{ fontSize: '20px' }}>🚨</div><div><div style={{ fontSize: '13px', fontWeight: 700, color: '#6B1E12' }}>Daily Drawdown Limit Breached</div><div style={{ fontSize: '12px', color: '#9B3A28', marginTop: '2px' }}>You are down {Math.abs(todayPnlPct).toFixed(1)}% today — your limit is {dailyLimit}%. Consider stopping trading for the day.</div></div></div>}
+        {dailyWarning && <div style={{ background: '#F5E6C8', border: '2px solid #C8903A', borderRadius: '10px', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: '12px' }}><div style={{ fontSize: '20px' }}>⚠️</div><div><div style={{ fontSize: '13px', fontWeight: 700, color: '#7A4F1A' }}>Approaching Daily Drawdown Limit</div><div style={{ fontSize: '12px', color: '#C8903A', marginTop: '2px' }}>You are down {Math.abs(todayPnlPct).toFixed(1)}% today — your limit is {dailyLimit}%. Trade carefully.</div></div></div>}
+        {maxBreached && <div style={{ background: '#F5DACE', border: '2px solid #9B3A28', borderRadius: '10px', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: '12px' }}><div style={{ fontSize: '20px' }}>🚨</div><div><div style={{ fontSize: '13px', fontWeight: 700, color: '#6B1E12' }}>Max Drawdown Limit Breached</div><div style={{ fontSize: '12px', color: '#9B3A28', marginTop: '2px' }}>Your all-time drawdown is {maxDrawdownPct.toFixed(1)}% — your limit is {maxDrawdownLimit}%.</div></div></div>}
+        {maxWarning && <div style={{ background: '#F5E6C8', border: '2px solid #C8903A', borderRadius: '10px', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: '12px' }}><div style={{ fontSize: '20px' }}>⚠️</div><div><div style={{ fontSize: '13px', fontWeight: 700, color: '#7A4F1A' }}>Approaching Max Drawdown Limit</div><div style={{ fontSize: '12px', color: '#C8903A', marginTop: '2px' }}>Your all-time drawdown is {maxDrawdownPct.toFixed(1)}% — your limit is {maxDrawdownLimit}%. Be cautious.</div></div></div>}
+
+        <SessionCountdown />
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
           {[

@@ -33,7 +33,7 @@ function calcWeightedR(side, entry, stop, partials) {
 const emptyForm = {
   pair: 'BTC/USDT', side: 'LONG', entry_price: '', exit_price: '', stop_price: '',
   pnl_r: '', pnl_usd: '', notes: '', emotion: '', setup: '', mistake: '',
-  trade_time: '',
+  trade_time: '', exit_time: '',
   date: new Date().toISOString().split('T')[0]
 }
 
@@ -75,6 +75,7 @@ function TradeLog() {
       setup: form.setup || null,
       mistake: form.mistake || null,
       trade_time: form.trade_time || null,
+      exit_time: form.exit_time || null,
       date: form.date,
       partials: []
     }])
@@ -96,6 +97,7 @@ function TradeLog() {
       setup: t.setup ?? '',
       mistake: t.mistake ?? '',
       trade_time: t.trade_time ?? '',
+      exit_time: t.exit_time ?? '',
     })
   }
 
@@ -111,6 +113,7 @@ function TradeLog() {
       setup: editForm.setup || null,
       mistake: editForm.mistake || null,
       trade_time: editForm.trade_time || null,
+      exit_time: editForm.exit_time || null,
     }).eq('id', trade.id)
     setEditingTrade(null)
     fetchTrades()
@@ -184,19 +187,11 @@ function TradeLog() {
               </span>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-              <div>
-                <label style={label}>$ P&L</label>
-                <input type="number" placeholder="e.g. 250 or -120" value={form.pnl_usd} onChange={e => updateForm('pnl_usd', e.target.value)} style={input} />
-              </div>
-              <div>
-                <label style={label}>Trade Time</label>
-                <input type="time" value={form.trade_time} onChange={e => updateForm('trade_time', e.target.value)} style={input} />
-              </div>
-              <div>
-                <label style={label}>Notes</label>
-                <textarea placeholder="What happened?" value={form.notes} onChange={e => updateForm('notes', e.target.value)} style={{ ...input, height: '38px', resize: 'none' }} />
-              </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+              <div><label style={label}>$ P&L</label><input type="number" placeholder="e.g. 250 or -120" value={form.pnl_usd} onChange={e => updateForm('pnl_usd', e.target.value)} style={input} /></div>
+              <div><label style={label}>Entry Time</label><input type="time" value={form.trade_time} onChange={e => updateForm('trade_time', e.target.value)} style={input} /></div>
+              <div><label style={label}>Exit Time</label><input type="time" value={form.exit_time} onChange={e => updateForm('exit_time', e.target.value)} style={input} /></div>
+              <div><label style={label}>Notes</label><textarea placeholder="What happened?" value={form.notes} onChange={e => updateForm('notes', e.target.value)} style={{ ...input, height: '38px', resize: 'none' }} /></div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '16px' }}>
@@ -278,11 +273,12 @@ function TradeLog() {
                       ))}
                     </div>
 
-                    {(t.trade_time || t.date) && (
+                    {(t.trade_time || t.exit_time) && (
                       <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
                         <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '8px', padding: '6px 12px', fontSize: '12px', color: '#5A4535' }}>
                           <span style={{ fontWeight: 700, color: '#9C856A', fontSize: '10px', textTransform: 'uppercase', marginRight: '6px' }}>Date</span>{t.date}
-                          {t.trade_time && <span style={{ marginLeft: '10px' }}><span style={{ fontWeight: 700, color: '#9C856A', fontSize: '10px', textTransform: 'uppercase', marginRight: '6px' }}>Time</span>{t.trade_time.slice(0,5)}</span>}
+                          {t.trade_time && <span style={{ marginLeft: '10px' }}><span style={{ fontWeight: 700, color: '#9C856A', fontSize: '10px', textTransform: 'uppercase', marginRight: '6px' }}>Entry</span>{t.trade_time.slice(0,5)}</span>}
+                          {t.exit_time && <span style={{ marginLeft: '10px' }}><span style={{ fontWeight: 700, color: '#9C856A', fontSize: '10px', textTransform: 'uppercase', marginRight: '6px' }}>Exit</span>{t.exit_time.slice(0,5)}</span>}
                         </div>
                       </div>
                     )}
@@ -336,14 +332,15 @@ function TradeLog() {
                 {isEditing && (
                   <div style={{ background: '#F5EFE4', borderTop: '1px solid #C8B89A', padding: '16px 18px' }}>
                     <div style={{ fontSize: '11px', fontWeight: 700, color: '#9C856A', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '14px' }}>Edit Trade</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '12px' }}>
                       <div><label style={label}>Entry Price</label><input type="number" value={editForm.entry_price} onChange={e => setEditForm({ ...editForm, entry_price: e.target.value })} style={input} /></div>
                       <div><label style={label}>Stop Loss</label><input type="number" value={editForm.stop_price} onChange={e => setEditForm({ ...editForm, stop_price: e.target.value })} style={input} /></div>
                       <div><label style={label}>Exit Price</label><input type="number" value={editForm.exit_price} onChange={e => setEditForm({ ...editForm, exit_price: e.target.value })} style={input} /></div>
-                      <div><label style={label}>R P&L</label><input type="number" value={editForm.pnl_r} onChange={e => setEditForm({ ...editForm, pnl_r: e.target.value })} style={input} /></div>
-                      <div><label style={label}>$ P&L</label><input type="number" placeholder="e.g. 250 or -120" value={editForm.pnl_usd} onChange={e => setEditForm({ ...editForm, pnl_usd: e.target.value })} style={input} /></div>
-                      <div><label style={label}>Trade Time</label><input type="time" value={editForm.trade_time} onChange={e => setEditForm({ ...editForm, trade_time: e.target.value })} style={input} /></div>
                       <div><label style={label}>Notes</label><input type="text" value={editForm.notes} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} style={input} /></div>
+                      <div><label style={label}>R P&L</label><input type="number" value={editForm.pnl_r} onChange={e => setEditForm({ ...editForm, pnl_r: e.target.value })} style={input} /></div>
+                      <div><label style={label}>$ P&L</label><input type="number" value={editForm.pnl_usd} onChange={e => setEditForm({ ...editForm, pnl_usd: e.target.value })} style={input} /></div>
+                      <div><label style={label}>Entry Time</label><input type="time" value={editForm.trade_time} onChange={e => setEditForm({ ...editForm, trade_time: e.target.value })} style={input} /></div>
+                      <div><label style={label}>Exit Time</label><input type="time" value={editForm.exit_time} onChange={e => setEditForm({ ...editForm, exit_time: e.target.value })} style={input} /></div>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '14px' }}>
                       <div>

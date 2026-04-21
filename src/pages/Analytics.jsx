@@ -34,10 +34,6 @@ function Analytics() {
   const worstTrade = trades.reduce((worst, t) => t.pnl_r < worst.pnl_r ? t : worst, trades[0])
   const expectancy = ((winRate / 100) * parseFloat(avgWin) + (1 - winRate / 100) * parseFloat(avgLoss)).toFixed(2)
 
-  const grossWins = winners.reduce((s, t) => s + (t.pnl_usd || t.pnl_r || 0), 0)
-  const grossLosses = Math.abs(losers.reduce((s, t) => s + (t.pnl_usd || t.pnl_r || 0), 0))
-  const profitFactor = grossLosses > 0 ? (grossWins / grossLosses).toFixed(2) : grossWins > 0 ? '∞' : '—'
-
   const pairStats = Object.values(trades.reduce((acc, t) => {
     if (!acc[t.pair]) acc[t.pair] = { pair: t.pair, trades: 0, pnl: 0, wins: 0 }
     acc[t.pair].trades++
@@ -80,7 +76,6 @@ function Analytics() {
   }, {})).sort((a, b) => a.pnl - b.pnl)
 
   // Streak calculations
-  let currentStreak = 0, currentStreakType = null
   let maxWinStreak = 0, maxLossStreak = 0
   let tempStreak = 0, tempType = null
   const reversedTrades = [...trades].reverse()
@@ -100,8 +95,8 @@ function Analytics() {
     else if (type === csType) cs++
     else break
   }
-  currentStreak = cs
-  currentStreakType = csType
+  const currentStreak = cs
+  const currentStreakType = csType
 
   // Day of week stats
   const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -213,12 +208,11 @@ function Analytics() {
 
         {activeTab === 'overview' && (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
               {[
                 { label: 'Win Rate', value: winRate + '%', sub: winners.length + 'W / ' + losers.length + 'L', color: winRate >= 50 ? '#3D7A52' : '#9B3A28' },
                 { label: 'Net P&L', value: (netPnl > 0 ? '+' : '') + netPnl.toFixed(1) + 'R', sub: 'all time', color: netPnl >= 0 ? '#3D7A52' : '#9B3A28' },
                 { label: 'Expectancy', value: (expectancy > 0 ? '+' : '') + expectancy + 'R', sub: 'per trade avg', color: parseFloat(expectancy) >= 0 ? '#3D7A52' : '#9B3A28' },
-                { label: 'Profit Factor', value: profitFactor, sub: 'gross win / loss', color: parseFloat(profitFactor) >= 1 ? '#3D7A52' : '#9B3A28' },
               ].map(s => (
                 <div key={s.label} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '10px', padding: '14px 16px' }}>
                   <div style={{ fontSize: '10px', color: '#9C856A', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '6px' }}>{s.label}</div>
@@ -366,46 +360,42 @@ function Analytics() {
         )}
 
         {activeTab === 'days' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={card}>
-              <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9C856A', marginBottom: '14px' }}>Performance by Day of Week</div>
-              {dayStats.length === 0 ? <div style={{ fontSize: '13px', color: '#9C856A' }}>No trades with dates yet.</div> : dayStats.sort((a, b) => b.pnl - a.pnl).map((d, i) => (
-                <div key={d.day} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 0', borderBottom: i < dayStats.length - 1 ? '1px solid #C8B89A' : 'none' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#2B2318', minWidth: '90px' }}>{d.day}</div>
-                  <div style={{ fontSize: '11px', color: '#9C856A', minWidth: '60px' }}>{d.trades} trade{d.trades > 1 ? 's' : ''}</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ height: '8px', background: '#F5EFE4', borderRadius: '99px', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: d.wr + '%', background: d.pnl >= 0 ? '#3D7A52' : '#9B3A28', borderRadius: '99px' }} />
-                    </div>
+          <div style={card}>
+            <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9C856A', marginBottom: '14px' }}>Performance by Day of Week</div>
+            {dayStats.length === 0 ? <div style={{ fontSize: '13px', color: '#9C856A' }}>No trades with dates yet.</div> : dayStats.sort((a, b) => b.pnl - a.pnl).map((d, i) => (
+              <div key={d.day} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 0', borderBottom: i < dayStats.length - 1 ? '1px solid #C8B89A' : 'none' }}>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: '#2B2318', minWidth: '90px' }}>{d.day}</div>
+                <div style={{ fontSize: '11px', color: '#9C856A', minWidth: '60px' }}>{d.trades} trade{d.trades > 1 ? 's' : ''}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ height: '8px', background: '#F5EFE4', borderRadius: '99px', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: d.wr + '%', background: d.pnl >= 0 ? '#3D7A52' : '#9B3A28', borderRadius: '99px' }} />
                   </div>
-                  <div style={{ fontSize: '11px', color: '#9C856A', minWidth: '35px' }}>{d.wr}% wr</div>
-                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '14px', fontWeight: 700, color: d.pnl >= 0 ? '#3D7A52' : '#9B3A28', minWidth: '60px', textAlign: 'right' }}>{d.pnl > 0 ? '+' : ''}{d.pnl.toFixed(1)}R</div>
                 </div>
-              ))}
-            </div>
+                <div style={{ fontSize: '11px', color: '#9C856A', minWidth: '35px' }}>{d.wr}% wr</div>
+                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '14px', fontWeight: 700, color: d.pnl >= 0 ? '#3D7A52' : '#9B3A28', minWidth: '60px', textAlign: 'right' }}>{d.pnl > 0 ? '+' : ''}{d.pnl.toFixed(1)}R</div>
+              </div>
+            ))}
           </div>
         )}
 
         {activeTab === 'time' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={card}>
-              <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9C856A', marginBottom: '14px' }}>Performance by Time of Day</div>
-              {timeStats.length === 0 ? (
-                <div style={{ fontSize: '13px', color: '#9C856A' }}>No trades with times logged yet. Add a trade time when logging trades to see this breakdown.</div>
-              ) : timeStats.sort((a, b) => b.pnl - a.pnl).map((t, i) => (
-                <div key={t.hour} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 0', borderBottom: i < timeStats.length - 1 ? '1px solid #C8B89A' : 'none' }}>
-                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '13px', fontWeight: 600, color: '#2B2318', minWidth: '60px' }}>{t.hour}</div>
-                  <div style={{ fontSize: '11px', color: '#9C856A', minWidth: '60px' }}>{t.trades} trade{t.trades > 1 ? 's' : ''}</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ height: '8px', background: '#F5EFE4', borderRadius: '99px', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: Math.round((t.wins / t.trades) * 100) + '%', background: t.pnl >= 0 ? '#3D7A52' : '#9B3A28', borderRadius: '99px' }} />
-                    </div>
+          <div style={card}>
+            <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9C856A', marginBottom: '14px' }}>Performance by Time of Day</div>
+            {timeStats.length === 0 ? (
+              <div style={{ fontSize: '13px', color: '#9C856A' }}>No trades with times logged yet. Add a trade time when logging trades to see this breakdown.</div>
+            ) : timeStats.sort((a, b) => b.pnl - a.pnl).map((t, i) => (
+              <div key={t.hour} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 0', borderBottom: i < timeStats.length - 1 ? '1px solid #C8B89A' : 'none' }}>
+                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '13px', fontWeight: 600, color: '#2B2318', minWidth: '60px' }}>{t.hour}</div>
+                <div style={{ fontSize: '11px', color: '#9C856A', minWidth: '60px' }}>{t.trades} trade{t.trades > 1 ? 's' : ''}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ height: '8px', background: '#F5EFE4', borderRadius: '99px', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: Math.round((t.wins / t.trades) * 100) + '%', background: t.pnl >= 0 ? '#3D7A52' : '#9B3A28', borderRadius: '99px' }} />
                   </div>
-                  <div style={{ fontSize: '11px', color: '#9C856A', minWidth: '35px' }}>{Math.round((t.wins / t.trades) * 100)}% wr</div>
-                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '14px', fontWeight: 700, color: t.pnl >= 0 ? '#3D7A52' : '#9B3A28', minWidth: '60px', textAlign: 'right' }}>{t.pnl > 0 ? '+' : ''}{t.pnl.toFixed(1)}R</div>
                 </div>
-              ))}
-            </div>
+                <div style={{ fontSize: '11px', color: '#9C856A', minWidth: '35px' }}>{Math.round((t.wins / t.trades) * 100)}% wr</div>
+                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '14px', fontWeight: 700, color: t.pnl >= 0 ? '#3D7A52' : '#9B3A28', minWidth: '60px', textAlign: 'right' }}>{t.pnl > 0 ? '+' : ''}{t.pnl.toFixed(1)}R</div>
+              </div>
+            ))}
           </div>
         )}
 

@@ -12,6 +12,7 @@ import Education from './pages/Education'
 import Export from './pages/Export'
 import Settings from './pages/Settings'
 import LevelPoster from './pages/LevelPoster'
+import Watchlist from './pages/Watchlist'
 
 function App() {
   const [activePage, setActivePage] = useState('dashboard')
@@ -31,6 +32,7 @@ function App() {
         {activePage === 'export' && <Export />}
         {activePage === 'settings' && <Settings />}
         {activePage === 'levelposter' && <LevelPoster />}
+        {activePage === 'watchlist' && <Watchlist />}
       </main>
     </div>
   )

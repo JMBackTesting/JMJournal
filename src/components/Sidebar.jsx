@@ -4,6 +4,7 @@ function Sidebar({ activePage, setActivePage }) {
     { id: 'tradelog', label: 'Trade Log', section: 'trading' },
     { id: 'journal', label: 'Journal', section: 'trading' },
     { id: 'keylevels', label: 'Key Levels', section: 'trading' },
+    { id: 'watchlist', label: 'Watchlist', section: 'trading' },
     { id: 'spotbuys', label: 'Spot Buys', section: 'trading' },
     { id: 'tasks', label: 'Tasks', section: 'trading' },
     { id: 'weekly', label: 'Old Positions', section: 'review' },
