@@ -11,6 +11,7 @@ import SpotBuys from './pages/SpotBuys'
 import Education from './pages/Education'
 import Export from './pages/Export'
 import Settings from './pages/Settings'
+import LevelPoster from './pages/LevelPoster'
 
 function App() {
   const [activePage, setActivePage] = useState('dashboard')
@@ -29,6 +30,7 @@ function App() {
         {activePage === 'education' && <Education />}
         {activePage === 'export' && <Export />}
         {activePage === 'settings' && <Settings />}
+        {activePage === 'levelposter' && <LevelPoster />}
       </main>
     </div>
   )

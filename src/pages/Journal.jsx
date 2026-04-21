@@ -6,6 +6,42 @@ const STATUSES = ['Active', 'Watching', 'Partial']
 const LEVERAGES = ['1x', '2x', '3x', '4x', '5x']
 const TIMEFRAMES = ['Daily', 'Weekly', 'Monthly']
 
+function getElapsed(createdAt) {
+  const now = new Date()
+  const start = new Date(createdAt)
+  const diff = Math.max(0, now - start)
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+  return { days, hours, minutes }
+}
+
+function ElapsedBadge({ createdAt, expanded }) {
+  const [elapsed, setElapsed] = useState(getElapsed(createdAt))
+  useEffect(() => {
+    const interval = setInterval(() => setElapsed(getElapsed(createdAt)), 60000)
+    return () => clearInterval(interval)
+  }, [createdAt])
+  if (expanded) {
+    return (
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#F5EFE4', border: '1px solid #C8B89A', borderRadius: '8px', padding: '8px 14px' }}>
+        <span style={{ fontSize: '18px' }}>⏱</span>
+        <div>
+          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '16px', fontWeight: 700, color: '#2B2318' }}>
+            {elapsed.days > 0 ? `${elapsed.days}d ` : ''}{elapsed.hours}h {elapsed.minutes}m
+          </div>
+          <div style={{ fontSize: '10px', color: '#9C856A', marginTop: '1px' }}>in trade</div>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <span style={{ fontSize: '10px', fontFamily: 'JetBrains Mono, monospace', color: '#9C856A', background: '#F5EFE4', border: '1px solid #C8B89A', borderRadius: '99px', padding: '2px 8px' }}>
+      {elapsed.days > 0 ? `${elapsed.days}d ` : ''}{elapsed.hours}h
+    </span>
+  )
+}
+
 function Journal() {
   const [entries, setEntries] = useState([])
   const [showing, setShowing] = useState(false)
@@ -121,6 +157,7 @@ function Journal() {
     const data = JSON.parse(entry.content || '{}')
     const sc = statusColor(data.status || entry.mood)
     const isExpanded = expanded === entry.id
+    const isActive = entry.mood !== 'Closed'
     return (
       <div key={entry.id} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '12px', overflow: 'hidden' }}>
         <div onClick={() => setExpanded(isExpanded ? null : entry.id)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 18px', cursor: 'pointer' }}>
@@ -129,6 +166,7 @@ function Journal() {
           <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', color: '#9C856A' }}>@ {data.entry_price}</div>
           {data.leverage && data.leverage !== '1x' && <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '99px', background: '#F5DACE', color: '#7A2E18', border: '1px solid #C87055' }}>{data.leverage}</span>}
           <div style={{ flex: 1 }} />
+          {isActive && entry.created_at && <ElapsedBadge createdAt={entry.created_at} expanded={false} />}
           {data.chart_url && <img src={data.chart_url} style={{ width: '48px', height: '32px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #C8B89A', cursor: 'pointer' }} onClick={e => { e.stopPropagation(); setExpandedChart(data.chart_url) }} />}
           {data.chart_rank && <span style={{ fontSize: '11px', fontFamily: 'JetBrains Mono, monospace', color: '#9C856A' }}>{data.chart_rank_tf} rank: <strong style={{ color: '#2B2318' }}>{data.chart_rank}/10</strong></span>}
           <span style={{ fontSize: '10px', fontWeight: 700, padding: '3px 8px', borderRadius: '99px', background: sc.bg, color: sc.color, border: '1px solid ' + sc.border }}>{data.status || entry.mood}</span>
@@ -138,23 +176,26 @@ function Journal() {
 
         {isExpanded && (
           <div style={{ borderTop: '1px solid #C8B89A', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+            {isActive && entry.created_at && (
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#9C856A', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '8px' }}>Time in trade</div>
+                <ElapsedBadge createdAt={entry.created_at} expanded={true} />
+              </div>
+            )}
+
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
-              <div style={{ background: '#F5EFE4', borderRadius: '8px', padding: '12px' }}>
-                <div style={{ fontSize: '10px', color: '#9C856A', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '4px' }}>Entry</div>
-                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '16px', fontWeight: 700, color: '#2B2318' }}>{data.entry_price}</div>
-              </div>
-              <div style={{ background: '#F5EFE4', borderRadius: '8px', padding: '12px' }}>
-                <div style={{ fontSize: '10px', color: '#9C856A', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '4px' }}>Stop</div>
-                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '16px', fontWeight: 700, color: '#9B3A28' }}>{data.stop_price || '-'}</div>
-              </div>
-              <div style={{ background: '#F5EFE4', borderRadius: '8px', padding: '12px' }}>
-                <div style={{ fontSize: '10px', color: '#9C856A', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '4px' }}>Size</div>
-                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '16px', fontWeight: 700, color: '#2B2318' }}>{data.size || '-'}</div>
-              </div>
-              <div style={{ background: '#F5EFE4', borderRadius: '8px', padding: '12px' }}>
-                <div style={{ fontSize: '10px', color: '#9C856A', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '4px' }}>Leverage</div>
-                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '16px', fontWeight: 700, color: '#2B2318' }}>{data.leverage || '1x'}</div>
-              </div>
+              {[
+                { label: 'Entry', value: data.entry_price, color: '#2B2318' },
+                { label: 'Stop', value: data.stop_price || '-', color: '#9B3A28' },
+                { label: 'Size', value: data.size || '-', color: '#2B2318' },
+                { label: 'Leverage', value: data.leverage || '1x', color: '#2B2318' },
+              ].map(s => (
+                <div key={s.label} style={{ background: '#F5EFE4', borderRadius: '8px', padding: '12px' }}>
+                  <div style={{ fontSize: '10px', color: '#9C856A', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '4px' }}>{s.label}</div>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '16px', fontWeight: 700, color: s.color }}>{s.value}</div>
+                </div>
+              ))}
             </div>
 
             {data.reasoning && (
@@ -248,17 +289,14 @@ function Journal() {
               <div><label style={label}>Status</label><select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} style={input}>{STATUSES.map(s => <option key={s}>{s}</option>)}</select></div>
               <div><label style={label}>Date</label><input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} style={input} /></div>
             </div>
-
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
               <div><label style={label}>Comparison chart rank</label><div style={{ display: 'flex', gap: '8px' }}><select value={form.chart_rank} onChange={e => setForm({ ...form, chart_rank: e.target.value })} style={{ ...input, width: '80px' }}>{[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n}>{n}</option>)}</select><select value={form.chart_rank_tf} onChange={e => setForm({ ...form, chart_rank_tf: e.target.value })} style={input}>{TIMEFRAMES.map(tf => <option key={tf}>{tf}</option>)}</select></div></div>
             </div>
-
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '12px' }}>
               <div><label style={label}>Why are you taking this trade?</label><textarea placeholder="e.g. Strong breakout retest on the daily, confluence with weekly level, market structure bullish..." value={form.reasoning} onChange={e => setForm({ ...form, reasoning: e.target.value })} style={{ ...input, height: '80px', resize: 'vertical' }} /></div>
               <div><label style={label}>Current trend / market condition</label><textarea placeholder="e.g. Overall bullish on BTC, USDT.D showing weakness, altcoins following..." value={form.trend} onChange={e => setForm({ ...form, trend: e.target.value })} style={{ ...input, height: '60px', resize: 'vertical' }} /></div>
               <div><label style={label}>Are there any conditions?</label><textarea placeholder="e.g. If price breaks below 81k stop is hit, watching for NY open reaction..." value={form.conditions} onChange={e => setForm({ ...form, conditions: e.target.value })} style={{ ...input, height: '60px', resize: 'vertical' }} /></div>
             </div>
-
             <div style={{ marginBottom: '12px' }}>
               <label style={label}>Chart Screenshot</label>
               <div ref={pasteRef} onPaste={handlePaste} tabIndex={0} style={{ border: '2px dashed #C8B89A', borderRadius: '8px', padding: '16px', textAlign: 'center', background: '#F5EFE4', outline: 'none' }}>
@@ -277,7 +315,6 @@ function Journal() {
               </div>
               {chartPreview && <button onClick={() => { setChartFile(null); setChartPreview(null) }} style={{ marginTop: '6px', background: 'transparent', border: 'none', fontSize: '11px', color: '#9C856A', cursor: 'pointer' }}>Remove image</button>}
             </div>
-
             <div style={{ display: 'flex', gap: '10px' }}>
               <button onClick={saveEntry} style={{ background: '#C8903A', border: 'none', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: 600, color: 'white', cursor: 'pointer' }}>{uploading ? 'Saving...' : 'Save Position'}</button>
               <button onClick={() => { setShowing(false); setChartFile(null); setChartPreview(null) }} style={{ background: 'transparent', border: '1px solid #C8B89A', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: 600, color: '#9C856A', cursor: 'pointer' }}>Cancel</button>

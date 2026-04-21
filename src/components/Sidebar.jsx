@@ -11,8 +11,9 @@ function Sidebar({ activePage, setActivePage }) {
     { id: 'education', label: 'Education', section: 'review' },
     { id: 'export', label: 'Export Data', section: 'review' },
     { id: 'settings', label: 'Settings', section: 'review' },
+    { id: 'levelposter', label: 'Level Poster', section: 'channel' },
   ]
-  const sections = ['overview', 'trading', 'review']
+  const sections = ['overview', 'trading', 'review', 'channel']
   return (
     <div style={{ width: '210px', minHeight: '100vh', background: '#2B2318', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
       <div style={{ fontFamily: 'Lora, serif', fontSize: '18px', fontWeight: 600, color: '#C8903A', padding: '20px 18px 18px', borderBottom: '1px solid #3D3025' }}>JM</div>
