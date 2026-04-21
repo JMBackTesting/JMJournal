@@ -31,7 +31,6 @@ function Dashboard() {
   const winRate = trades.length ? Math.round((trades.filter(t => t.pnl_r > 0).length / trades.length) * 100) : 0
   const netPnl = trades.reduce((sum, t) => sum + (t.pnl_r || 0), 0).toFixed(1)
 
-  // Risk guardrails
   const today = new Date().toISOString().split('T')[0]
   const accountSize = parseFloat(settings.account_size) || 0
   const dailyLimit = parseFloat(settings.daily_drawdown) || 0
@@ -53,7 +52,6 @@ function Dashboard() {
   const dailyWarning = dailyLimit > 0 && accountSize > 0 && todayPnlPct <= -(dailyLimit * 0.75) && !dailyBreached
   const maxWarning = maxDrawdownLimit > 0 && accountSize > 0 && maxDrawdownPct >= maxDrawdownLimit * 0.75 && !maxBreached
 
-  // Goals
   const goalDaily = parseFloat(settings.goal_daily) || 0
   const goalWeekly = parseFloat(settings.goal_weekly) || 0
   const goalMonthly = parseFloat(settings.goal_monthly) || 0
@@ -95,11 +93,6 @@ function Dashboard() {
       </div>
     )
   }
-
-  // Profit factor
-  const grossWins = allTrades.filter(t => (t.pnl_usd || t.pnl_r) > 0).reduce((s, t) => s + (t.pnl_usd || t.pnl_r || 0), 0)
-  const grossLosses = Math.abs(allTrades.filter(t => (t.pnl_usd || t.pnl_r) < 0).reduce((s, t) => s + (t.pnl_usd || t.pnl_r || 0), 0))
-  const profitFactor = grossLosses > 0 ? (grossWins / grossLosses).toFixed(2) : grossWins > 0 ? '∞' : '—'
 
   return (
     <div>
@@ -153,11 +146,10 @@ function Dashboard() {
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
           {[
             { label: 'Win Rate', value: winRate + '%', sub: trades.length + ' trades logged', color: '#3D7A52' },
             { label: 'Risk:Reward', value: netPnl + 'R', sub: 'all time', color: parseFloat(netPnl) >= 0 ? '#3D7A52' : '#9B3A28' },
-            { label: 'Profit Factor', value: profitFactor, sub: 'gross win / loss', color: parseFloat(profitFactor) >= 1 ? '#3D7A52' : '#9B3A28' },
             { label: 'Key Levels', value: levels.length, sub: 'tracked', color: '#2B2318' },
             { label: 'Tasks Today', value: tasks.filter(t => t.done).length + '/' + tasks.length, sub: 'completed', color: '#C8903A' },
           ].map(s => (
