@@ -33,6 +33,7 @@ function calcWeightedR(side, entry, stop, partials) {
 const emptyForm = {
   pair: 'BTC/USDT', side: 'LONG', entry_price: '', exit_price: '', stop_price: '',
   pnl_r: '', pnl_usd: '', notes: '', emotion: '', setup: '', mistake: '',
+  trade_time: '',
   date: new Date().toISOString().split('T')[0]
 }
 
@@ -73,6 +74,7 @@ function TradeLog() {
       emotion: form.emotion || null,
       setup: form.setup || null,
       mistake: form.mistake || null,
+      trade_time: form.trade_time || null,
       date: form.date,
       partials: []
     }])
@@ -93,6 +95,7 @@ function TradeLog() {
       emotion: t.emotion ?? '',
       setup: t.setup ?? '',
       mistake: t.mistake ?? '',
+      trade_time: t.trade_time ?? '',
     })
   }
 
@@ -107,6 +110,7 @@ function TradeLog() {
       emotion: editForm.emotion || null,
       setup: editForm.setup || null,
       mistake: editForm.mistake || null,
+      trade_time: editForm.trade_time || null,
     }).eq('id', trade.id)
     setEditingTrade(null)
     fetchTrades()
@@ -172,23 +176,29 @@ function TradeLog() {
               <div><label style={label}>Stop Loss</label><input type="number" placeholder="0.00" value={form.stop_price} onChange={e => updateForm('stop_price', e.target.value)} style={input} /></div>
               <div><label style={label}>Exit Price</label><input type="number" placeholder="0.00" value={form.exit_price} onChange={e => updateForm('exit_price', e.target.value)} style={input} /></div>
             </div>
+
             <div style={{ background: '#F5EFE4', border: '1px solid #C8B89A', borderRadius: '8px', padding: '12px 16px', marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: '12px', color: '#9C856A', fontWeight: 600 }}>CALCULATED R</span>
               <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '20px', fontWeight: 700, color: parseFloat(autoR) >= 0 ? '#3D7A52' : '#9B3A28' }}>
                 {autoR !== '' ? (parseFloat(autoR) > 0 ? '+' : '') + autoR + 'R' : '— fill in prices above'}
               </span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
               <div>
                 <label style={label}>$ P&L</label>
                 <input type="number" placeholder="e.g. 250 or -120" value={form.pnl_usd} onChange={e => updateForm('pnl_usd', e.target.value)} style={input} />
-                <div style={{ fontSize: '10px', color: '#9C856A', marginTop: '3px' }}>Actual dollar profit/loss</div>
+              </div>
+              <div>
+                <label style={label}>Trade Time</label>
+                <input type="time" value={form.trade_time} onChange={e => updateForm('trade_time', e.target.value)} style={input} />
               </div>
               <div>
                 <label style={label}>Notes</label>
-                <textarea placeholder="What happened? Why did you take this trade?" value={form.notes} onChange={e => updateForm('notes', e.target.value)} style={{ ...input, height: '60px', resize: 'vertical' }} />
+                <textarea placeholder="What happened?" value={form.notes} onChange={e => updateForm('notes', e.target.value)} style={{ ...input, height: '38px', resize: 'none' }} />
               </div>
             </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '16px' }}>
               <div>
                 <label style={label}>Emotion</label>
@@ -218,6 +228,7 @@ function TradeLog() {
                 </select>
               </div>
             </div>
+
             <div style={{ display: 'flex', gap: '10px' }}>
               <button onClick={saveTrade} style={{ background: '#C8903A', border: 'none', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: 600, color: 'white', cursor: 'pointer' }}>Save Trade</button>
               <button onClick={() => setShowing(false)} style={{ background: 'transparent', border: '1px solid #C8B89A', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: 600, color: '#9C856A', cursor: 'pointer' }}>Cancel</button>
@@ -244,7 +255,7 @@ function TradeLog() {
                     {t.setup && <span style={{ fontSize: '10px', background: '#F5E6C8', border: '1px solid #C8903A', borderRadius: '99px', padding: '1px 7px', color: '#7A4F1A' }}>{t.setup}</span>}
                     {t.mistake && <span style={{ fontSize: '10px', background: '#F5DACE', border: '1px solid #C87055', borderRadius: '99px', padding: '1px 7px', color: '#7A2E18' }}>{t.mistake}</span>}
                   </div>
-                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '11px', color: '#9C856A' }}>{t.date}</div>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '11px', color: '#9C856A' }}>{t.trade_time ? t.trade_time.slice(0, 5) : t.date}</div>
                   <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '13px', fontWeight: 700, color: t.pnl_r >= 0 ? '#3D7A52' : '#9B3A28', minWidth: '45px', textAlign: 'right' }}>{t.pnl_r > 0 ? '+' : ''}{t.pnl_r}R</div>
                   {t.pnl_usd != null && <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '13px', fontWeight: 700, color: t.pnl_usd >= 0 ? '#3D7A52' : '#9B3A28', minWidth: '60px', textAlign: 'right' }}>{t.pnl_usd > 0 ? '+$' : '-$'}{Math.abs(t.pnl_usd).toFixed(0)}</div>}
                   <button onClick={e => { e.stopPropagation(); deleteTrade(t.id) }} style={{ background: 'transparent', border: 'none', color: '#C8B89A', cursor: 'pointer', fontSize: '16px', padding: '0 4px' }}>x</button>
@@ -266,6 +277,15 @@ function TradeLog() {
                         </div>
                       ))}
                     </div>
+
+                    {(t.trade_time || t.date) && (
+                      <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+                        <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '8px', padding: '6px 12px', fontSize: '12px', color: '#5A4535' }}>
+                          <span style={{ fontWeight: 700, color: '#9C856A', fontSize: '10px', textTransform: 'uppercase', marginRight: '6px' }}>Date</span>{t.date}
+                          {t.trade_time && <span style={{ marginLeft: '10px' }}><span style={{ fontWeight: 700, color: '#9C856A', fontSize: '10px', textTransform: 'uppercase', marginRight: '6px' }}>Time</span>{t.trade_time.slice(0,5)}</span>}
+                        </div>
+                      </div>
+                    )}
 
                     {(t.emotion || t.setup || t.mistake) && (
                       <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
@@ -291,7 +311,7 @@ function TradeLog() {
                     )}
 
                     <div style={{ display: 'flex', gap: '8px', marginBottom: showPForm ? '14px' : '0' }}>
-                      <button onClick={() => { startEdit(t) }} style={{ background: 'transparent', border: '1px solid #C8B89A', borderRadius: '8px', padding: '7px 16px', fontSize: '12px', fontWeight: 600, color: '#5A4535', cursor: 'pointer' }}>✏️ Edit Trade</button>
+                      <button onClick={() => startEdit(t)} style={{ background: 'transparent', border: '1px solid #C8B89A', borderRadius: '8px', padding: '7px 16px', fontSize: '12px', fontWeight: 600, color: '#5A4535', cursor: 'pointer' }}>✏️ Edit Trade</button>
                       {!showPForm && <button onClick={() => setShowPartialForm(prev => ({ ...prev, [t.id]: true }))} style={{ background: 'transparent', border: '1px solid #C8903A', borderRadius: '8px', padding: '7px 16px', fontSize: '12px', fontWeight: 600, color: '#C8903A', cursor: 'pointer' }}>+ Add Partial</button>}
                     </div>
 
@@ -322,6 +342,7 @@ function TradeLog() {
                       <div><label style={label}>Exit Price</label><input type="number" value={editForm.exit_price} onChange={e => setEditForm({ ...editForm, exit_price: e.target.value })} style={input} /></div>
                       <div><label style={label}>R P&L</label><input type="number" value={editForm.pnl_r} onChange={e => setEditForm({ ...editForm, pnl_r: e.target.value })} style={input} /></div>
                       <div><label style={label}>$ P&L</label><input type="number" placeholder="e.g. 250 or -120" value={editForm.pnl_usd} onChange={e => setEditForm({ ...editForm, pnl_usd: e.target.value })} style={input} /></div>
+                      <div><label style={label}>Trade Time</label><input type="time" value={editForm.trade_time} onChange={e => setEditForm({ ...editForm, trade_time: e.target.value })} style={input} /></div>
                       <div><label style={label}>Notes</label><input type="text" value={editForm.notes} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} style={input} /></div>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '14px' }}>

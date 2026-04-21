@@ -34,6 +34,10 @@ function Analytics() {
   const worstTrade = trades.reduce((worst, t) => t.pnl_r < worst.pnl_r ? t : worst, trades[0])
   const expectancy = ((winRate / 100) * parseFloat(avgWin) + (1 - winRate / 100) * parseFloat(avgLoss)).toFixed(2)
 
+  const grossWins = winners.reduce((s, t) => s + (t.pnl_usd || t.pnl_r || 0), 0)
+  const grossLosses = Math.abs(losers.reduce((s, t) => s + (t.pnl_usd || t.pnl_r || 0), 0))
+  const profitFactor = grossLosses > 0 ? (grossWins / grossLosses).toFixed(2) : grossWins > 0 ? '∞' : '—'
+
   const pairStats = Object.values(trades.reduce((acc, t) => {
     if (!acc[t.pair]) acc[t.pair] = { pair: t.pair, trades: 0, pnl: 0, wins: 0 }
     acc[t.pair].trades++
@@ -75,15 +79,73 @@ function Analytics() {
     return acc
   }, {})).sort((a, b) => a.pnl - b.pnl)
 
+  // Streak calculations
+  let currentStreak = 0, currentStreakType = null
+  let maxWinStreak = 0, maxLossStreak = 0
+  let tempStreak = 0, tempType = null
+  const reversedTrades = [...trades].reverse()
+  reversedTrades.forEach((t, i) => {
+    const type = t.pnl_r > 0 ? 'win' : 'loss'
+    if (i === 0) { tempStreak = 1; tempType = type }
+    else if (type === tempType) { tempStreak++ }
+    else { tempStreak = 1; tempType = type }
+    if (type === 'win') maxWinStreak = Math.max(maxWinStreak, tempStreak)
+    else maxLossStreak = Math.max(maxLossStreak, tempStreak)
+  })
+  const lastTrades = [...trades].reverse()
+  let cs = 0, csType = null
+  for (const t of lastTrades) {
+    const type = t.pnl_r > 0 ? 'win' : 'loss'
+    if (csType === null) { csType = type; cs = 1 }
+    else if (type === csType) cs++
+    else break
+  }
+  currentStreak = cs
+  currentStreakType = csType
+
+  // Day of week stats
+  const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+  const dayStats = DAYS.map((day, di) => {
+    const dayTrades = trades.filter(t => t.date && new Date(t.date).getDay() === di)
+    const pnl = dayTrades.reduce((s, t) => s + (t.pnl_r || 0), 0)
+    const wins = dayTrades.filter(t => t.pnl_r > 0).length
+    return { day, trades: dayTrades.length, pnl, wins, wr: dayTrades.length ? Math.round((wins / dayTrades.length) * 100) : 0 }
+  }).filter(d => d.trades > 0)
+
+  // Time of day stats
+  const timeStats = Object.values(trades.filter(t => t.trade_time).reduce((acc, t) => {
+    const hour = t.trade_time.slice(0, 2) + ':00'
+    if (!acc[hour]) acc[hour] = { hour, trades: 0, pnl: 0, wins: 0 }
+    acc[hour].trades++
+    acc[hour].pnl += t.pnl_r || 0
+    if (t.pnl_r > 0) acc[hour].wins++
+    return acc
+  }, {})).sort((a, b) => a.hour.localeCompare(b.hour))
+
+  // Drawdown chart
   let runningPnl = 0
   const curve = trades.map((t, i) => {
     runningPnl += t.pnl_r || 0
     return { i, pnl: parseFloat(runningPnl.toFixed(2)), date: t.date }
   })
+  let peak = 0, ddCurve = []
+  curve.forEach(p => {
+    if (p.pnl > peak) peak = p.pnl
+    const dd = peak > 0 ? ((peak - p.pnl) / peak) * 100 : 0
+    ddCurve.push({ i: p.i, dd: parseFloat(dd.toFixed(2)), date: p.date })
+  })
+  const maxDd = Math.max(...ddCurve.map(p => p.dd), 0)
+  const chartW = 600, chartH = 140, pad = 20
+  const ddPoints = ddCurve.map(p => {
+    const x = pad + ((p.i / Math.max(ddCurve.length - 1, 1)) * (chartW - pad * 2))
+    const y = pad + ((p.dd / (maxDd || 1)) * (chartH - pad * 2))
+    return `${x},${y}`
+  }).join(' ')
+
+  // P&L curve
   const maxPnl = Math.max(...curve.map(p => p.pnl), 0)
   const minPnl = Math.min(...curve.map(p => p.pnl), 0)
   const range = maxPnl - minPnl || 1
-  const chartW = 600, chartH = 140, pad = 20
   const points = curve.map(p => {
     const x = pad + ((p.i / Math.max(curve.length - 1, 1)) * (chartW - pad * 2))
     const y = pad + ((1 - (p.pnl - minPnl) / range) * (chartH - pad * 2))
@@ -92,97 +154,13 @@ function Analytics() {
   const zeroY = pad + ((1 - (0 - minPnl) / range) * (chartH - pad * 2))
   const finalPnl = curve[curve.length - 1]?.pnl || 0
 
-  // Calendar heatmap
-  const calendarTrades = trades.reduce((acc, t) => {
-    if (!t.date) return acc
-    if (!acc[t.date]) acc[t.date] = { pnl: 0, count: 0 }
-    acc[t.date].pnl += t.pnl_r || 0
-    acc[t.date].count++
-    return acc
-  }, {})
-
-  const allDates = Object.keys(calendarTrades).sort()
-  const calendarMonths = [...new Set(allDates.map(d => d.slice(0, 7)))].sort()
-
-  const getDayColor = (pnl) => {
-    if (pnl === undefined) return 'transparent'
-    if (pnl === 0) return '#E8DEC8'
-    if (pnl > 3) return '#1A5C34'
-    if (pnl > 1) return '#2A7A48'
-    if (pnl > 0) return '#5DA070'
-    if (pnl > -1) return '#C87055'
-    if (pnl > -3) return '#9B3A28'
-    return '#6B1E12'
-  }
-
-  const renderCalendar = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {calendarMonths.map(month => {
-        const [year, mon] = month.split('-').map(Number)
-        const firstDay = new Date(year, mon - 1, 1).getDay()
-        const daysInMonth = new Date(year, mon, 0).getDate()
-        const days = []
-        for (let i = 0; i < firstDay; i++) days.push(null)
-        for (let d = 1; d <= daysInMonth; d++) {
-          const dateStr = `${year}-${String(mon).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-          days.push({ date: dateStr, data: calendarTrades[dateStr] })
-        }
-        const monthPnl = allDates.filter(d => d.startsWith(month)).reduce((sum, d) => sum + calendarTrades[d].pnl, 0)
-        return (
-          <div key={month} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '12px', padding: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <div style={{ fontFamily: 'Lora, serif', fontSize: '14px', fontWeight: 600, color: '#2B2318' }}>
-                {new Date(year, mon - 1).toLocaleString('default', { month: 'long', year: 'numeric' })}
-              </div>
-              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '14px', fontWeight: 700, color: monthPnl >= 0 ? '#3D7A52' : '#9B3A28' }}>
-                {monthPnl > 0 ? '+' : ''}{monthPnl.toFixed(1)}R
-              </div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '4px' }}>
-              {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
-                <div key={d} style={{ textAlign: 'center', fontSize: '10px', color: '#9C856A', fontWeight: 600, padding: '2px' }}>{d}</div>
-              ))}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
-              {days.map((day, i) => (
-                <div key={i} style={{
-                  aspectRatio: '1',
-                  borderRadius: '4px',
-                  background: day?.data ? getDayColor(day.data.pnl) : day ? '#F5EFE4' : 'transparent',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: day?.data ? 'pointer' : 'default',
-                  border: day?.data ? '1px solid rgba(0,0,0,0.1)' : '1px solid transparent',
-                  position: 'relative'
-                }} title={day?.data ? `${day.date}: ${day.data.pnl > 0 ? '+' : ''}${day.data.pnl.toFixed(1)}R (${day.data.count} trade${day.data.count > 1 ? 's' : ''})` : ''}>
-                  {day && <span style={{ fontSize: '10px', color: day?.data ? 'white' : '#9C856A', fontWeight: day?.data ? 700 : 400 }}>{parseInt(day.date.split('-')[2])}</span>}
-                  {day?.data && <span style={{ fontSize: '8px', color: 'rgba(255,255,255,0.9)', fontFamily: 'JetBrains Mono, monospace' }}>{day.data.pnl > 0 ? '+' : ''}{day.data.pnl.toFixed(1)}</span>}
-                </div>
-              ))}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' }}>
-              <span style={{ fontSize: '10px', color: '#9C856A' }}>P&L scale:</span>
-              {[[-4, '#6B1E12'], [-2, '#9B3A28'], [-0.5, '#C87055'], [0, '#E8DEC8'], [0.5, '#5DA070'], [2, '#2A7A48'], [4, '#1A5C34']].map(([val, col]) => (
-                <div key={val} style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                  <div style={{ width: '12px', height: '12px', borderRadius: '2px', background: col }} />
-                  <span style={{ fontSize: '9px', color: '#9C856A' }}>{val > 0 ? '+' : ''}{val}R</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
+  const card = { background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '12px', padding: '16px 18px' }
+  const TABS = ['overview', 'calendar', 'streaks', 'days', 'time', 'drawdown', 'tags']
 
   const renderTagStats = (stats, label, emptyMsg) => (
     <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '12px', padding: '16px 18px' }}>
       <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9C856A', marginBottom: '14px' }}>{label}</div>
-      {stats.length === 0 ? (
-        <div style={{ fontSize: '12px', color: '#9C856A' }}>{emptyMsg}</div>
-      ) : stats.map((s, i) => (
+      {stats.length === 0 ? <div style={{ fontSize: '12px', color: '#9C856A' }}>{emptyMsg}</div> : stats.map((s, i) => (
         <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 0', borderBottom: i < stats.length - 1 ? '1px solid #C8B89A' : 'none' }}>
           <div style={{ fontSize: '12px', fontWeight: 600, color: '#2B2318', minWidth: '120px' }}>{s.label}</div>
           <div style={{ fontSize: '11px', color: '#9C856A', minWidth: '50px' }}>{s.trades} trade{s.trades > 1 ? 's' : ''}</div>
@@ -198,8 +176,26 @@ function Analytics() {
     </div>
   )
 
-  const card = { background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '12px', padding: '16px 18px' }
-  const TABS = ['overview', 'calendar', 'tags']
+  // Calendar heatmap
+  const calendarTrades = trades.reduce((acc, t) => {
+    if (!t.date) return acc
+    if (!acc[t.date]) acc[t.date] = { pnl: 0, count: 0 }
+    acc[t.date].pnl += t.pnl_r || 0
+    acc[t.date].count++
+    return acc
+  }, {})
+  const allDates = Object.keys(calendarTrades).sort()
+  const calendarMonths = [...new Set(allDates.map(d => d.slice(0, 7)))].sort()
+  const getDayColor = (pnl) => {
+    if (pnl === undefined) return 'transparent'
+    if (pnl === 0) return '#E8DEC8'
+    if (pnl > 3) return '#1A5C34'
+    if (pnl > 1) return '#2A7A48'
+    if (pnl > 0) return '#5DA070'
+    if (pnl > -1) return '#C87055'
+    if (pnl > -3) return '#9B3A28'
+    return '#6B1E12'
+  }
 
   return (
     <div>
@@ -209,10 +205,9 @@ function Analytics() {
       </div>
 
       <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
-        <div style={{ display: 'flex', background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '10px', padding: '3px', width: 'fit-content' }}>
+        <div style={{ display: 'flex', background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '10px', padding: '3px', width: 'fit-content', flexWrap: 'wrap', gap: '2px' }}>
           {TABS.map(tab => (
-            <div key={tab} onClick={() => setActiveTab(tab)} style={{ padding: '6px 18px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', background: activeTab === tab ? '#F5EFE4' : 'transparent', color: activeTab === tab ? '#2B2318' : '#9C856A', border: activeTab === tab ? '1px solid #C8B89A' : '1px solid transparent', textTransform: 'capitalize' }}>{tab}</div>
+            <div key={tab} onClick={() => setActiveTab(tab)} style={{ padding: '6px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', background: activeTab === tab ? '#F5EFE4' : 'transparent', color: activeTab === tab ? '#2B2318' : '#9C856A', border: activeTab === tab ? '1px solid #C8B89A' : '1px solid transparent', textTransform: 'capitalize' }}>{tab}</div>
           ))}
         </div>
 
@@ -223,7 +218,7 @@ function Analytics() {
                 { label: 'Win Rate', value: winRate + '%', sub: winners.length + 'W / ' + losers.length + 'L', color: winRate >= 50 ? '#3D7A52' : '#9B3A28' },
                 { label: 'Net P&L', value: (netPnl > 0 ? '+' : '') + netPnl.toFixed(1) + 'R', sub: 'all time', color: netPnl >= 0 ? '#3D7A52' : '#9B3A28' },
                 { label: 'Expectancy', value: (expectancy > 0 ? '+' : '') + expectancy + 'R', sub: 'per trade avg', color: parseFloat(expectancy) >= 0 ? '#3D7A52' : '#9B3A28' },
-                { label: 'Total Trades', value: totalTrades, sub: 'logged', color: '#2B2318' },
+                { label: 'Profit Factor', value: profitFactor, sub: 'gross win / loss', color: parseFloat(profitFactor) >= 1 ? '#3D7A52' : '#9B3A28' },
               ].map(s => (
                 <div key={s.label} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '10px', padding: '14px 16px' }}>
                   <div style={{ fontSize: '10px', color: '#9C856A', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '6px' }}>{s.label}</div>
@@ -232,7 +227,6 @@ function Analytics() {
                 </div>
               ))}
             </div>
-
             <div style={card}>
               <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9C856A', marginBottom: '14px' }}>P&L Curve</div>
               <svg viewBox={`0 0 ${chartW} ${chartH}`} style={{ width: '100%', height: '140px' }}>
@@ -250,7 +244,6 @@ function Analytics() {
                 <span>{curve[curve.length - 1]?.date}</span>
               </div>
             </div>
-
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <div style={card}>
                 <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9C856A', marginBottom: '14px' }}>By Pair</div>
@@ -280,7 +273,6 @@ function Analytics() {
                 ))}
               </div>
             </div>
-
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
               {[
                 { label: 'Avg Win', value: '+' + avgWin + 'R', color: '#3D7A52' },
@@ -298,19 +290,169 @@ function Analytics() {
           </>
         )}
 
-        {activeTab === 'calendar' && renderCalendar()}
+        {activeTab === 'calendar' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {calendarMonths.map(month => {
+              const [year, mon] = month.split('-').map(Number)
+              const firstDay = new Date(year, mon - 1, 1).getDay()
+              const daysInMonth = new Date(year, mon, 0).getDate()
+              const days = []
+              for (let i = 0; i < firstDay; i++) days.push(null)
+              for (let d = 1; d <= daysInMonth; d++) {
+                const dateStr = `${year}-${String(mon).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+                days.push({ date: dateStr, data: calendarTrades[dateStr] })
+              }
+              const monthPnl = allDates.filter(d => d.startsWith(month)).reduce((sum, d) => sum + calendarTrades[d].pnl, 0)
+              return (
+                <div key={month} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '12px', padding: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <div style={{ fontFamily: 'Lora, serif', fontSize: '14px', fontWeight: 600, color: '#2B2318' }}>{new Date(year, mon - 1).toLocaleString('default', { month: 'long', year: 'numeric' })}</div>
+                    <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '14px', fontWeight: 700, color: monthPnl >= 0 ? '#3D7A52' : '#9B3A28' }}>{monthPnl > 0 ? '+' : ''}{monthPnl.toFixed(1)}R</div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '4px' }}>
+                    {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
+                      <div key={d} style={{ textAlign: 'center', fontSize: '10px', color: '#9C856A', fontWeight: 600, padding: '2px' }}>{d}</div>
+                    ))}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
+                    {days.map((day, i) => (
+                      <div key={i} title={day?.data ? `${day.date}: ${day.data.pnl > 0 ? '+' : ''}${day.data.pnl.toFixed(1)}R (${day.data.count} trade${day.data.count > 1 ? 's' : ''})` : ''} style={{ aspectRatio: '1', borderRadius: '4px', background: day?.data ? getDayColor(day.data.pnl) : day ? '#F5EFE4' : 'transparent', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: day?.data ? '1px solid rgba(0,0,0,0.1)' : '1px solid transparent' }}>
+                        {day && <span style={{ fontSize: '10px', color: day?.data ? 'white' : '#9C856A', fontWeight: day?.data ? 700 : 400 }}>{parseInt(day.date.split('-')[2])}</span>}
+                        {day?.data && <span style={{ fontSize: '8px', color: 'rgba(255,255,255,0.9)', fontFamily: 'JetBrains Mono, monospace' }}>{day.data.pnl > 0 ? '+' : ''}{day.data.pnl.toFixed(1)}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {activeTab === 'streaks' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+              <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '10px', padding: '14px 16px' }}>
+                <div style={{ fontSize: '10px', color: '#9C856A', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '6px' }}>Current Streak</div>
+                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '28px', fontWeight: 700, color: currentStreakType === 'win' ? '#3D7A52' : '#9B3A28' }}>{currentStreak}{currentStreakType === 'win' ? 'W' : 'L'}</div>
+                <div style={{ fontSize: '11px', color: '#9C856A', marginTop: '3px' }}>{currentStreakType === 'win' ? 'winning' : 'losing'} streak</div>
+              </div>
+              <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '10px', padding: '14px 16px' }}>
+                <div style={{ fontSize: '10px', color: '#9C856A', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '6px' }}>Best Win Streak</div>
+                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '28px', fontWeight: 700, color: '#3D7A52' }}>{maxWinStreak}W</div>
+                <div style={{ fontSize: '11px', color: '#9C856A', marginTop: '3px' }}>consecutive wins</div>
+              </div>
+              <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '10px', padding: '14px 16px' }}>
+                <div style={{ fontSize: '10px', color: '#9C856A', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '6px' }}>Worst Loss Streak</div>
+                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '28px', fontWeight: 700, color: '#9B3A28' }}>{maxLossStreak}L</div>
+                <div style={{ fontSize: '11px', color: '#9C856A', marginTop: '3px' }}>consecutive losses</div>
+              </div>
+            </div>
+            <div style={card}>
+              <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9C856A', marginBottom: '14px' }}>Trade History (W/L)</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                {[...trades].reverse().map((t, i) => (
+                  <div key={i} title={`${t.pair} ${t.pnl_r > 0 ? '+' : ''}${t.pnl_r}R — ${t.date}`} style={{ width: '24px', height: '24px', borderRadius: '4px', background: t.pnl_r > 0 ? '#3D7A52' : t.pnl_r < 0 ? '#9B3A28' : '#C8B89A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', fontWeight: 700, color: 'white', cursor: 'default' }}>
+                    {t.pnl_r > 0 ? 'W' : t.pnl_r < 0 ? 'L' : 'B'}
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: '16px', marginTop: '10px', fontSize: '11px', color: '#9C856A' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '10px', height: '10px', borderRadius: '2px', background: '#3D7A52' }} /> Win</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '10px', height: '10px', borderRadius: '2px', background: '#9B3A28' }} /> Loss</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '10px', height: '10px', borderRadius: '2px', background: '#C8B89A' }} /> Break even</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'days' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={card}>
+              <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9C856A', marginBottom: '14px' }}>Performance by Day of Week</div>
+              {dayStats.length === 0 ? <div style={{ fontSize: '13px', color: '#9C856A' }}>No trades with dates yet.</div> : dayStats.sort((a, b) => b.pnl - a.pnl).map((d, i) => (
+                <div key={d.day} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 0', borderBottom: i < dayStats.length - 1 ? '1px solid #C8B89A' : 'none' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#2B2318', minWidth: '90px' }}>{d.day}</div>
+                  <div style={{ fontSize: '11px', color: '#9C856A', minWidth: '60px' }}>{d.trades} trade{d.trades > 1 ? 's' : ''}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ height: '8px', background: '#F5EFE4', borderRadius: '99px', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: d.wr + '%', background: d.pnl >= 0 ? '#3D7A52' : '#9B3A28', borderRadius: '99px' }} />
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#9C856A', minWidth: '35px' }}>{d.wr}% wr</div>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '14px', fontWeight: 700, color: d.pnl >= 0 ? '#3D7A52' : '#9B3A28', minWidth: '60px', textAlign: 'right' }}>{d.pnl > 0 ? '+' : ''}{d.pnl.toFixed(1)}R</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'time' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={card}>
+              <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9C856A', marginBottom: '14px' }}>Performance by Time of Day</div>
+              {timeStats.length === 0 ? (
+                <div style={{ fontSize: '13px', color: '#9C856A' }}>No trades with times logged yet. Add a trade time when logging trades to see this breakdown.</div>
+              ) : timeStats.sort((a, b) => b.pnl - a.pnl).map((t, i) => (
+                <div key={t.hour} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 0', borderBottom: i < timeStats.length - 1 ? '1px solid #C8B89A' : 'none' }}>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '13px', fontWeight: 600, color: '#2B2318', minWidth: '60px' }}>{t.hour}</div>
+                  <div style={{ fontSize: '11px', color: '#9C856A', minWidth: '60px' }}>{t.trades} trade{t.trades > 1 ? 's' : ''}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ height: '8px', background: '#F5EFE4', borderRadius: '99px', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: Math.round((t.wins / t.trades) * 100) + '%', background: t.pnl >= 0 ? '#3D7A52' : '#9B3A28', borderRadius: '99px' }} />
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#9C856A', minWidth: '35px' }}>{Math.round((t.wins / t.trades) * 100)}% wr</div>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '14px', fontWeight: 700, color: t.pnl >= 0 ? '#3D7A52' : '#9B3A28', minWidth: '60px', textAlign: 'right' }}>{t.pnl > 0 ? '+' : ''}{t.pnl.toFixed(1)}R</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'drawdown' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '10px', padding: '14px 16px' }}>
+                <div style={{ fontSize: '10px', color: '#9C856A', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '6px' }}>Max Drawdown</div>
+                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '28px', fontWeight: 700, color: '#9B3A28' }}>{maxDd.toFixed(1)}%</div>
+                <div style={{ fontSize: '11px', color: '#9C856A', marginTop: '3px' }}>peak to trough</div>
+              </div>
+              <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '10px', padding: '14px 16px' }}>
+                <div style={{ fontSize: '10px', color: '#9C856A', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '6px' }}>Peak R</div>
+                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '28px', fontWeight: 700, color: '#3D7A52' }}>+{Math.max(...curve.map(p => p.pnl)).toFixed(1)}R</div>
+                <div style={{ fontSize: '11px', color: '#9C856A', marginTop: '3px' }}>highest point</div>
+              </div>
+            </div>
+            <div style={card}>
+              <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9C856A', marginBottom: '14px' }}>Drawdown Over Time</div>
+              <svg viewBox={`0 0 ${chartW} ${chartH}`} style={{ width: '100%', height: '140px' }}>
+                <line x1={pad} y1={pad} x2={chartW - pad} y2={pad} stroke="#C8B89A" strokeWidth="1" strokeDasharray="4,4" />
+                <polyline points={ddPoints} fill="none" stroke="#9B3A28" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+                {ddCurve.map((p, i) => {
+                  const x = pad + ((i / Math.max(ddCurve.length - 1, 1)) * (chartW - pad * 2))
+                  const y = pad + ((p.dd / (maxDd || 1)) * (chartH - pad * 2))
+                  return <circle key={i} cx={x} cy={y} r="2.5" fill="#9B3A28" />
+                })}
+              </svg>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#9C856A', fontFamily: 'JetBrains Mono, monospace', marginTop: '4px' }}>
+                <span>{ddCurve[0]?.date}</span>
+                <span style={{ color: '#9B3A28', fontWeight: 700 }}>Max: {maxDd.toFixed(1)}%</span>
+                <span>{ddCurve[ddCurve.length - 1]?.date}</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {activeTab === 'tags' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ background: '#F5E6C8', border: '1px solid #C8903A', borderRadius: '10px', padding: '12px 16px', fontSize: '12px', color: '#7A4F1A' }}>
               Tag your trades with emotion, setup and mistake in the Trade Log to see breakdowns here.
             </div>
-            {renderTagStats(setupStats, 'By Setup', 'No setup tags yet — add them in Trade Log')}
-            {renderTagStats(emotionStats, 'By Emotion', 'No emotion tags yet — add them in Trade Log')}
-            {renderTagStats(mistakeStats, 'By Mistake', 'No mistake tags yet — add them in Trade Log')}
+            {renderTagStats(setupStats, 'By Setup', 'No setup tags yet')}
+            {renderTagStats(emotionStats, 'By Emotion', 'No emotion tags yet')}
+            {renderTagStats(mistakeStats, 'By Mistake', 'No mistake tags yet')}
           </div>
         )}
-
       </div>
     </div>
   )
