@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../supabase'
 
 function SessionCountdown() {
-  const [times, setTimes] = useState({})
+  const [times, setTimes] = useState([])
 
   const getSessions = () => {
     const now = new Date()
@@ -33,7 +33,7 @@ function SessionCountdown() {
     <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '12px', padding: '14px 18px' }}>
       <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9C856A', marginBottom: '12px' }}>Session Countdown (UTC)</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
-        {(Array.isArray(times) ? times : []).map(s => (
+        {times.map(s => (
           <div key={s.name} style={{ background: s.isActive ? '#D4EAD8' : '#F5EFE4', border: s.isActive ? '1px solid #5DA070' : '1px solid #C8B89A', borderRadius: '8px', padding: '10px 14px' }}>
             <div style={{ fontSize: '10px', fontWeight: 600, color: s.isActive ? '#2A5E38' : '#9C856A', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>{s.name}</div>
             {s.isActive ? (
@@ -57,7 +57,7 @@ function Dashboard() {
 
   useEffect(() => {
     const today = new Date().toISOString().split('T')[0]
-    supabase.from('trades').select('*').order('date', { ascending: false }).limit(5).then(({ data }) => data && setTrades(data))
+    supabase.from('trades').select('*').order('date', { ascending: false }).then(({ data }) => data && setTrades(data))
     supabase.from('trades').select('*').order('date', { ascending: true }).then(({ data }) => data && setAllTrades(data))
     supabase.from('key_levels').select('*').order('created_at', { ascending: false }).then(({ data }) => data && setLevels(data))
     supabase.from('tasks').select('*').eq('date', today).then(({ data }) => data && setTasks(data))
@@ -79,6 +79,8 @@ function Dashboard() {
   const netPnl = trades.reduce((sum, t) => sum + (t.pnl_r || 0), 0).toFixed(1)
 
   const today = new Date().toISOString().split('T')[0]
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+
   const accountSize = parseFloat(settings.account_size) || 0
   const dailyLimit = parseFloat(settings.daily_drawdown) || 0
   const maxDrawdownLimit = parseFloat(settings.max_drawdown) || 0
@@ -98,6 +100,11 @@ function Dashboard() {
   const maxBreached = maxDrawdownLimit > 0 && accountSize > 0 && maxDrawdownPct >= maxDrawdownLimit
   const dailyWarning = dailyLimit > 0 && accountSize > 0 && todayPnlPct <= -(dailyLimit * 0.75) && !dailyBreached
   const maxWarning = maxDrawdownLimit > 0 && accountSize > 0 && maxDrawdownPct >= maxDrawdownLimit * 0.75 && !maxBreached
+
+  // Avg R:R calculations
+  const allTimeAvgR = trades.length ? (trades.reduce((s, t) => s + (t.pnl_r || 0), 0) / trades.length).toFixed(2) : null
+  const last30Trades = trades.filter(t => t.date >= thirtyDaysAgo)
+  const last30AvgR = last30Trades.length ? (last30Trades.reduce((s, t) => s + (t.pnl_r || 0), 0) / last30Trades.length).toFixed(2) : null
 
   const goalDaily = parseFloat(settings.goal_daily) || 0
   const goalWeekly = parseFloat(settings.goal_weekly) || 0
@@ -140,6 +147,8 @@ function Dashboard() {
     )
   }
 
+  const recentTrades = trades.slice(0, 5)
+
   return (
     <div>
       <div style={{ background: '#EDE4D3', borderBottom: '1px solid #C8B89A', padding: '14px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -177,30 +186,20 @@ function Dashboard() {
           ))}
         </div>
 
-        {accountSize > 0 && (dailyLimit > 0 || maxDrawdownLimit > 0) && (
-          <div style={{ display: 'grid', gridTemplateColumns: dailyLimit > 0 && maxDrawdownLimit > 0 ? '1fr 1fr' : '1fr', gap: '10px' }}>
-            {dailyLimit > 0 && (
+        {(allTimeAvgR !== null || last30AvgR !== null) && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            {allTimeAvgR !== null && (
               <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '10px', padding: '14px 16px' }}>
-                <div style={{ fontSize: '10px', color: '#9C856A', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '8px' }}>Daily Drawdown</div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '16px', fontWeight: 700, color: todayPnlPct >= 0 ? '#3D7A52' : dailyBreached ? '#9B3A28' : '#C8903A' }}>{todayPnlPct >= 0 ? '+' : ''}{todayPnlPct.toFixed(1)}%</span>
-                  <span style={{ fontSize: '11px', color: '#9C856A' }}>limit: {dailyLimit}%</span>
-                </div>
-                <div style={{ height: '6px', background: '#F5EFE4', borderRadius: '99px', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: Math.min((Math.abs(todayPnlPct) / dailyLimit) * 100, 100) + '%', background: dailyBreached ? '#9B3A28' : dailyWarning ? '#C8903A' : '#3D7A52', borderRadius: '99px' }} />
-                </div>
+                <div style={{ fontSize: '10px', color: '#9C856A', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '6px' }}>Avg R — All Time</div>
+                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '22px', fontWeight: 700, color: parseFloat(allTimeAvgR) >= 0 ? '#3D7A52' : '#9B3A28' }}>{parseFloat(allTimeAvgR) > 0 ? '+' : ''}{allTimeAvgR}R</div>
+                <div style={{ fontSize: '11px', color: '#9C856A', marginTop: '3px' }}>per trade average</div>
               </div>
             )}
-            {maxDrawdownLimit > 0 && (
+            {last30AvgR !== null && (
               <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '10px', padding: '14px 16px' }}>
-                <div style={{ fontSize: '10px', color: '#9C856A', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '8px' }}>Max Drawdown</div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '16px', fontWeight: 700, color: maxBreached ? '#9B3A28' : maxWarning ? '#C8903A' : '#3D7A52' }}>{maxDrawdownPct.toFixed(1)}%</span>
-                  <span style={{ fontSize: '11px', color: '#9C856A' }}>limit: {maxDrawdownLimit}%</span>
-                </div>
-                <div style={{ height: '6px', background: '#F5EFE4', borderRadius: '99px', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: Math.min((maxDrawdownPct / maxDrawdownLimit) * 100, 100) + '%', background: maxBreached ? '#9B3A28' : maxWarning ? '#C8903A' : '#3D7A52', borderRadius: '99px' }} />
-                </div>
+                <div style={{ fontSize: '10px', color: '#9C856A', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '6px' }}>Avg R — Last 30 Days</div>
+                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '22px', fontWeight: 700, color: parseFloat(last30AvgR) >= 0 ? '#3D7A52' : '#9B3A28' }}>{parseFloat(last30AvgR) > 0 ? '+' : ''}{last30AvgR}R</div>
+                <div style={{ fontSize: '11px', color: '#9C856A', marginTop: '3px' }}>{last30Trades.length} trades in period</div>
               </div>
             )}
           </div>
@@ -247,9 +246,9 @@ function Dashboard() {
 
         <div style={card}>
           <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9C856A', marginBottom: '14px' }}>Recent Trades</div>
-          {trades.length === 0 && <div style={{ fontSize: '13px', color: '#9C856A' }}>No trades logged yet.</div>}
-          {trades.map((t, i) => (
-            <div key={t.id} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto auto auto', gap: '10px', alignItems: 'center', padding: '9px 0', borderBottom: i < trades.length - 1 ? '1px solid #C8B89A' : 'none' }}>
+          {recentTrades.length === 0 && <div style={{ fontSize: '13px', color: '#9C856A' }}>No trades logged yet.</div>}
+          {recentTrades.map((t, i) => (
+            <div key={t.id} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto auto auto', gap: '10px', alignItems: 'center', padding: '9px 0', borderBottom: i < recentTrades.length - 1 ? '1px solid #C8B89A' : 'none' }}>
               <span style={{ fontSize: '10px', fontWeight: 700, padding: '3px 8px', borderRadius: '5px', background: t.side === 'LONG' ? '#D4EAD8' : '#F5DACE', color: t.side === 'LONG' ? '#2A5E38' : '#7A2E18' }}>{t.side}</span>
               <div>
                 <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', fontWeight: 600, color: '#2B2318' }}>{t.pair}</div>

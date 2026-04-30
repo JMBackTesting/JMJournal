@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../supabase'
 
 const PAIRS = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'HYPE/USDT', 'Other']
-const STATUSES = ['Active', 'Watching', 'Partial']
+const STATUSES = ['Active Bids', 'In Trade', 'Watching / POI', 'Rough Drawing']
 const LEVERAGES = ['1x', '2x', '3x', '4x', '5x']
 const TIMEFRAMES = ['Daily', 'Weekly', 'Monthly']
 
@@ -50,7 +50,7 @@ function Journal() {
   const [chartFile, setChartFile] = useState(null)
   const [chartPreview, setChartPreview] = useState(null)
   const [uploading, setUploading] = useState(false)
-  const [form, setForm] = useState({ pair: 'BTC/USDT', customPair: '', side: 'LONG', entry_price: '', stop_price: '', size: '', leverage: '1x', status: 'Active', reasoning: '', trend: '', conditions: '', chart_rank: '5', chart_rank_tf: 'Daily', date: new Date().toISOString().split('T')[0] })
+  const [form, setForm] = useState({ pair: 'BTC/USDT', customPair: '', side: 'LONG', entry_price: '', stop_price: '', size: '', leverage: '1x', status: 'Active Bids', reasoning: '', trend: '', conditions: '', chart_rank: '5', chart_rank_tf: 'Daily', date: new Date().toISOString().split('T')[0] })
   const fileRef = useRef()
   const pasteRef = useRef()
 
@@ -101,11 +101,21 @@ function Journal() {
       mood: form.status,
       tags: [finalPair, form.side, form.status]
     }])
-    setForm({ pair: 'BTC/USDT', customPair: '', side: 'LONG', entry_price: '', stop_price: '', size: '', leverage: '1x', status: 'Active', reasoning: '', trend: '', conditions: '', chart_rank: '5', chart_rank_tf: 'Daily', date: new Date().toISOString().split('T')[0] })
+    setForm({ pair: 'BTC/USDT', customPair: '', side: 'LONG', entry_price: '', stop_price: '', size: '', leverage: '1x', status: 'Active Bids', reasoning: '', trend: '', conditions: '', chart_rank: '5', chart_rank_tf: 'Daily', date: new Date().toISOString().split('T')[0] })
     setChartFile(null)
     setChartPreview(null)
     setUploading(false)
     setShowing(false)
+    fetchEntries()
+  }
+
+  const updateStatus = async (entry, newStatus) => {
+    const data = JSON.parse(entry.content || '{}')
+    await supabase.from('journal_entries').update({
+      content: JSON.stringify({ ...data, status: newStatus }),
+      mood: newStatus,
+      tags: [...(entry.tags || []).filter(t => !STATUSES.includes(t) && t !== 'Closed' && t !== 'Active' && t !== 'Watching' && t !== 'Partial'), newStatus]
+    }).eq('id', entry.id)
     fetchEntries()
   }
 
@@ -114,7 +124,7 @@ function Journal() {
     await supabase.from('journal_entries').update({
       content: JSON.stringify({ ...data, status: 'Closed' }),
       mood: 'Closed',
-      tags: [...(entry.tags || []).filter(t => !STATUSES.includes(t)), 'Closed']
+      tags: [...(entry.tags || []).filter(t => !STATUSES.includes(t) && t !== 'Closed' && t !== 'Active' && t !== 'Watching' && t !== 'Partial'), 'Closed']
     }).eq('id', entry.id)
     fetchEntries()
   }
@@ -122,9 +132,9 @@ function Journal() {
   const reopenPosition = async (entry) => {
     const data = JSON.parse(entry.content || '{}')
     await supabase.from('journal_entries').update({
-      content: JSON.stringify({ ...data, status: 'Active' }),
-      mood: 'Active',
-      tags: [...(entry.tags || []).filter(t => t !== 'Closed'), 'Active']
+      content: JSON.stringify({ ...data, status: 'Active Bids' }),
+      mood: 'Active Bids',
+      tags: [...(entry.tags || []).filter(t => t !== 'Closed' && t !== 'Active' && t !== 'Watching' && t !== 'Partial'), 'Active Bids']
     }).eq('id', entry.id)
     fetchEntries()
   }
@@ -146,16 +156,45 @@ function Journal() {
   const label = { fontSize: '11px', fontWeight: 600, color: '#9C856A', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '5px', display: 'block' }
 
   const statusColor = (s) => {
-    if (s === 'Active') return { bg: '#D4EAD8', color: '#2A5E38', border: '#5DA070' }
-    if (s === 'Watching') return { bg: '#F5E6C8', color: '#7A4F1A', border: '#C8903A' }
-    if (s === 'Partial') return { bg: '#E6F0FA', color: '#1A4F7A', border: '#5A90CA' }
+    if (s === 'In Trade') return { bg: '#D4EAD8', color: '#2A5E38', border: '#5DA070' }
+    if (s === 'Active Bids' || s === 'Active') return { bg: '#F5E6C8', color: '#7A4F1A', border: '#C8903A' }
+    if (s === 'Watching / POI' || s === 'Watching') return { bg: '#E6D4F0', color: '#5A1A7A', border: '#9A6AC8' }
+    if (s === 'Rough Drawing' || s === 'Partial') return { bg: '#D4E8F0', color: '#1A4F6A', border: '#5A90B0' }
     if (s === 'Closed') return { bg: '#F1EFE8', color: '#5F5E5A', border: '#B4B2A9' }
     return { bg: '#F1EFE8', color: '#5F5E5A', border: '#B4B2A9' }
   }
 
+  const StatusDropdown = ({ entry, currentStatus }) => {
+    const sc = statusColor(currentStatus)
+    const [open, setOpen] = useState(false)
+    return (
+      <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+        <div
+          onClick={e => { e.stopPropagation(); setOpen(!open) }}
+          style={{ fontSize: '10px', fontWeight: 700, padding: '3px 10px', borderRadius: '99px', background: sc.bg, color: sc.color, border: '1.5px solid ' + sc.border, cursor: 'pointer', whiteSpace: 'nowrap', userSelect: 'none' }}
+        >
+          {currentStatus}
+        </div>
+        {open && (
+          <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', background: '#F5EFE4', border: '1px solid #C8B89A', borderRadius: '10px', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 100, minWidth: '140px', overflow: 'hidden' }}>
+            {STATUSES.map(s => {
+              const sc2 = statusColor(s)
+              return (
+                <div key={s} onClick={() => { updateStatus(entry, s); setOpen(false) }} style={{ padding: '8px 14px', fontSize: '11px', fontWeight: 600, color: sc2.color, background: currentStatus === s ? sc2.bg : 'transparent', cursor: 'pointer', borderBottom: '1px solid #EDE4D3' }}>
+                  {s}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   const renderEntry = (entry) => {
     const data = JSON.parse(entry.content || '{}')
-    const sc = statusColor(data.status || entry.mood)
+    const currentStatus = data.status || entry.mood
+    const sc = statusColor(currentStatus)
     const isExpanded = expanded === entry.id
     const isActive = entry.mood !== 'Closed'
     return (
@@ -169,14 +208,16 @@ function Journal() {
           {isActive && entry.created_at && <ElapsedBadge createdAt={entry.created_at} expanded={false} />}
           {data.chart_url && <img src={data.chart_url} style={{ width: '48px', height: '32px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #C8B89A', cursor: 'pointer' }} onClick={e => { e.stopPropagation(); setExpandedChart(data.chart_url) }} />}
           {data.chart_rank && <span style={{ fontSize: '11px', fontFamily: 'JetBrains Mono, monospace', color: '#9C856A' }}>{data.chart_rank_tf} rank: <strong style={{ color: '#2B2318' }}>{data.chart_rank}/10</strong></span>}
-          <span style={{ fontSize: '10px', fontWeight: 700, padding: '3px 8px', borderRadius: '99px', background: sc.bg, color: sc.color, border: '1px solid ' + sc.border }}>{data.status || entry.mood}</span>
+          {isActive
+            ? <StatusDropdown entry={entry} currentStatus={currentStatus} />
+            : <span style={{ fontSize: '10px', fontWeight: 700, padding: '3px 8px', borderRadius: '99px', background: sc.bg, color: sc.color, border: '1px solid ' + sc.border }}>Closed</span>
+          }
           <div style={{ fontSize: '11px', color: '#9C856A', fontFamily: 'JetBrains Mono, monospace' }}>{entry.date ? new Date(entry.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''}</div>
           <span style={{ fontSize: '14px', color: '#9C856A' }}>{isExpanded ? '▲' : '▼'}</span>
         </div>
 
         {isExpanded && (
           <div style={{ borderTop: '1px solid #C8B89A', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-
             {isActive && entry.created_at && (
               <div>
                 <div style={{ fontSize: '11px', fontWeight: 700, color: '#9C856A', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '8px' }}>Time in trade</div>

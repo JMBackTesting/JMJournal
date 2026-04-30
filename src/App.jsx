@@ -11,7 +11,6 @@ import SpotBuys from './pages/SpotBuys'
 import Education from './pages/Education'
 import Export from './pages/Export'
 import Settings from './pages/Settings'
-import LevelPoster from './pages/LevelPoster'
 import Watchlist from './pages/Watchlist'
 
 function App() {
@@ -31,7 +30,6 @@ function App() {
         {activePage === 'education' && <Education />}
         {activePage === 'export' && <Export />}
         {activePage === 'settings' && <Settings />}
-        {activePage === 'levelposter' && <LevelPoster />}
         {activePage === 'watchlist' && <Watchlist />}
       </main>
     </div>
