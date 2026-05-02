@@ -16,6 +16,7 @@ function KeyLevels() {
   const [levels, setLevels] = useState([])
   const [showing, setShowing] = useState(false)
   const [activeTab, setActiveTab] = useState('Daily')
+  const [filterPair, setFilterPair] = useState('All')
   const [form, setForm] = useState(defaultForm)
   const [chartFile, setChartFile] = useState(null)
   const [chartPreview, setChartPreview] = useState(null)
@@ -123,8 +124,16 @@ function KeyLevels() {
 
   const filteredLevels = levels.filter(l => {
     const d = parseData(l.notes)
-    return d.tab === activeTab
+    const tabMatch = d.tab === activeTab
+    const pairMatch = filterPair === 'All' || l.pair === filterPair
+    return tabMatch && pairMatch
   })
+
+  const availablePairs = ['All', ...new Set(
+    levels
+      .filter(l => parseData(l.notes).tab === activeTab)
+      .map(l => l.pair)
+  )].sort((a, b) => a === 'All' ? -1 : b === 'All' ? 1 : a.localeCompare(b))
 
   const input = { background: '#F5EFE4', border: '1px solid #C8B89A', borderRadius: '8px', padding: '8px 12px', fontSize: '13px', color: '#2B2318', width: '100%', outline: 'none', fontFamily: 'DM Sans, sans-serif' }
   const label = { fontSize: '11px', fontWeight: 600, color: '#9C856A', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '5px', display: 'block' }
@@ -140,9 +149,9 @@ function KeyLevels() {
           <div>
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '8px' }}>
               <button type="button" onClick={() => fileRef.current.click()} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', color: '#5A4535', cursor: 'pointer', fontWeight: 600 }}>Browse file</button>
-              <button type="button" onClick={() => pasteRef.current.focus()} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', color: '#5A4535', cursor: 'pointer', fontWeight: 600 }}>Click then Cmd+V to paste</button>
+              <button type="button" onClick={() => pasteRef.current.focus()} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', color: '#5A4535', cursor: 'pointer', fontWeight: 600 }}>Click then Ctrl+V to paste</button>
             </div>
-            <div style={{ fontSize: '11px', color: '#C8B89A' }}>Copy chart in TradingView then press Cmd+V</div>
+            <div style={{ fontSize: '11px', color: '#C8B89A' }}>Copy chart in TradingView then press Ctrl+V</div>
           </div>
         )}
         <input ref={fileRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
@@ -324,19 +333,28 @@ function KeyLevels() {
       <div style={{ background: '#EDE4D3', borderBottom: '1px solid #C8B89A', padding: '14px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <div style={{ fontFamily: 'Lora, serif', fontSize: '16px', fontWeight: 600, color: '#2B2318' }}>Key Levels</div>
-          <div style={{ fontSize: '11px', color: '#9C856A', marginTop: '2px' }}>{filteredLevels.length} levels on {activeTab} view</div>
+          <div style={{ fontSize: '11px', color: '#9C856A', marginTop: '2px' }}>{filteredLevels.length} entries on {activeTab}{filterPair !== 'All' ? ' — ' + filterPair : ''}</div>
         </div>
         <button onClick={() => setShowing(!showing)} style={{ background: '#C8903A', border: 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', fontWeight: 600, color: 'white', cursor: 'pointer' }}>+ Add Level</button>
       </div>
       <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <div style={{ display: 'flex', background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '10px', padding: '3px', width: 'fit-content', flexWrap: 'wrap', gap: '2px' }}>
-          {TIMEFRAMES.map(tf => (
-            <div key={tf} onClick={() => { setActiveTab(tf); setShowing(false); setForm(defaultForm) }} style={{ padding: '6px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', background: activeTab === tf ? '#F5EFE4' : 'transparent', color: activeTab === tf ? '#2B2318' : '#9C856A', border: activeTab === tf ? '1px solid #C8B89A' : '1px solid transparent', whiteSpace: 'nowrap' }}>{tf}</div>
-          ))}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '10px', padding: '3px', flexWrap: 'wrap', gap: '2px' }}>
+            {TIMEFRAMES.map(tf => (
+              <div key={tf} onClick={() => { setActiveTab(tf); setShowing(false); setForm(defaultForm); setFilterPair('All') }} style={{ padding: '6px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', background: activeTab === tf ? '#F5EFE4' : 'transparent', color: activeTab === tf ? '#2B2318' : '#9C856A', border: activeTab === tf ? '1px solid #C8B89A' : '1px solid transparent', whiteSpace: 'nowrap' }}>{tf}</div>
+            ))}
+          </div>
+          {availablePairs.length > 1 && (
+            <div style={{ display: 'flex', background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '10px', padding: '3px', flexWrap: 'wrap', gap: '2px' }}>
+              {availablePairs.map(p => (
+                <div key={p} onClick={() => setFilterPair(p)} style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', background: filterPair === p ? '#F5EFE4' : 'transparent', color: filterPair === p ? '#2B2318' : '#9C856A', border: filterPair === p ? '1px solid #C8B89A' : '1px solid transparent', whiteSpace: 'nowrap' }}>{p}</div>
+              ))}
+            </div>
+          )}
         </div>
         {showing && renderForm()}
         {filteredLevels.length === 0 && !showing && (
-          <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '12px', padding: '24px', fontSize: '13px', color: '#9C856A' }}>No {activeTab.toLowerCase()} entries added yet.</div>
+          <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '12px', padding: '24px', fontSize: '13px', color: '#9C856A' }}>No {activeTab.toLowerCase()} entries{filterPair !== 'All' ? ' for ' + filterPair : ''} yet.</div>
         )}
         {filteredLevels.map(renderLevel)}
       </div>

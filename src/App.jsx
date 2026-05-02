@@ -5,13 +5,12 @@ import TradeLog from './pages/TradeLog'
 import KeyLevels from './pages/KeyLevels'
 import Journal from './pages/Journal'
 import WeeklyReview from './pages/WeeklyReview'
-import Tasks from './pages/Tasks'
 import Analytics from './pages/Analytics'
 import SpotBuys from './pages/SpotBuys'
 import Education from './pages/Education'
 import Export from './pages/Export'
 import Settings from './pages/Settings'
-import Watchlist from './pages/Watchlist'
+import EmotionJournal from './pages/EmotionJournal'
 
 function App() {
   const [activePage, setActivePage] = useState('dashboard')
@@ -24,13 +23,12 @@ function App() {
         {activePage === 'keylevels' && <KeyLevels />}
         {activePage === 'journal' && <Journal />}
         {activePage === 'weekly' && <WeeklyReview />}
-        {activePage === 'tasks' && <Tasks />}
         {activePage === 'analytics' && <Analytics />}
         {activePage === 'spotbuys' && <SpotBuys />}
         {activePage === 'education' && <Education />}
         {activePage === 'export' && <Export />}
         {activePage === 'settings' && <Settings />}
-        {activePage === 'watchlist' && <Watchlist />}
+        {activePage === 'emotionjournal' && <EmotionJournal />}
       </main>
     </div>
   )
