@@ -110,25 +110,49 @@ function WeeklyReview() {
     return !!data.review
   }
 
+  const tradeIsReviewed = (t) => t.notes?.includes('REVIEW:')
+  const positionIsReviewed = (p) => {
+    try { return !!JSON.parse(p.content || '{}').review } catch { return false }
+  }
+
   const input = { background: '#F5EFE4', border: '1px solid #C8B89A', borderRadius: '8px', padding: '8px 12px', fontSize: '13px', color: '#2B2318', width: '100%', outline: 'none', fontFamily: 'DM Sans, sans-serif' }
 
-  const renderTradeRow = (t) => (
-    <div key={t.id} onClick={() => selectItem(t, 'trade')} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', background: selected?.id === t.id ? '#E8DEC8' : '#F5EFE4', border: selected?.id === t.id ? '1px solid #C8903A' : '1px solid #C8B89A', marginBottom: '6px' }}>
-      <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '5px', background: t.side === 'LONG' ? '#D4EAD8' : '#F5DACE', color: t.side === 'LONG' ? '#2A5E38' : '#7A2E18' }}>{t.side}</span>
-      <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', fontWeight: 600, color: '#2B2318' }}>{t.pair}</div>
-      <div style={{ flex: 1, fontSize: '12px', color: '#9C856A' }}>{t.notes?.slice(0, 35) || '-'}</div>
-      <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', fontWeight: 700, color: t.pnl_r >= 0 ? '#3D7A52' : '#9B3A28' }}>{t.pnl_r > 0 ? '+' : ''}{t.pnl_r}R</div>
-    </div>
-  )
+  const renderTradeRow = (t) => {
+    const reviewed = tradeIsReviewed(t)
+    return (
+      <div key={t.id} onClick={() => selectItem(t, 'trade')} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', borderRadius: '8px', cursor: 'pointer', background: selected?.id === t.id ? '#E8DEC8' : '#F5EFE4', border: selected?.id === t.id ? '1px solid #C8903A' : '1px solid #C8B89A', marginBottom: '6px' }}>
+        <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 6px', borderRadius: '5px', flexShrink: 0, background: t.side === 'LONG' ? '#D4EAD8' : '#F5DACE', color: t.side === 'LONG' ? '#2A5E38' : '#7A2E18' }}>{t.side}</span>
+        <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '11px', fontWeight: 600, color: '#2B2318', flexShrink: 0 }}>{t.pair}</div>
+        <div style={{ flex: 1 }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}>
+          {reviewed && <span style={{ fontSize: '9px', fontWeight: 700, padding: '1px 6px', borderRadius: '99px', background: '#D4EAD8', color: '#2A5E38', border: '1px solid #5DA070', whiteSpace: 'nowrap' }}>Reviewed</span>}
+          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '11px', fontWeight: 700, color: t.pnl_r >= 0 ? '#3D7A52' : '#9B3A28', whiteSpace: 'nowrap' }}>{t.pnl_r > 0 ? '+' : ''}{t.pnl_r}R</div>
+        </div>
+      </div>
+    )
+  }
 
   const renderPositionRow = (p) => {
     const data = JSON.parse(p.content || '{}')
+    const reviewed = positionIsReviewed(p)
+    const statusColor = (s) => {
+      if (s === 'In Trade') return { bg: '#D4EAD8', color: '#2A5E38', border: '#5DA070' }
+      if (s === 'Active Bids' || s === 'Active') return { bg: '#F5E6C8', color: '#7A4F1A', border: '#C8903A' }
+      if (s === 'Watching / POI' || s === 'Watching') return { bg: '#E6D4F0', color: '#5A1A7A', border: '#9A6AC8' }
+      if (s === 'Rough Drawing' || s === 'Partial') return { bg: '#D4E8F0', color: '#1A4F6A', border: '#5A90B0' }
+      if (s === 'Closed') return { bg: '#F1EFE8', color: '#5F5E5A', border: '#B4B2A9' }
+      return { bg: '#F1EFE8', color: '#5F5E5A', border: '#B4B2A9' }
+    }
+    const sc = statusColor(data.status || p.mood)
     return (
-      <div key={p.id} onClick={() => selectItem(p, 'position')} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', background: selected?.id === p.id ? '#E8DEC8' : '#F5EFE4', border: selected?.id === p.id ? '1px solid #C8903A' : '1px solid #C8B89A', marginBottom: '6px' }}>
-        <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '5px', background: data.side === 'LONG' ? '#D4EAD8' : '#F5DACE', color: data.side === 'LONG' ? '#2A5E38' : '#7A2E18' }}>{data.side}</span>
-        <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', fontWeight: 600, color: '#2B2318' }}>{data.pair}</div>
-        <div style={{ flex: 1, fontSize: '12px', color: '#9C856A' }}>{data.reasoning?.slice(0, 35) || '-'}</div>
-        <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '99px', background: p.mood === 'Closed' ? '#F1EFE8' : '#D4EAD8', color: p.mood === 'Closed' ? '#5F5E5A' : '#2A5E38' }}>{p.mood}</span>
+      <div key={p.id} onClick={() => selectItem(p, 'position')} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', borderRadius: '8px', cursor: 'pointer', background: selected?.id === p.id ? '#E8DEC8' : '#F5EFE4', border: selected?.id === p.id ? '1px solid #C8903A' : '1px solid #C8B89A', marginBottom: '6px' }}>
+        <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 6px', borderRadius: '5px', flexShrink: 0, background: data.side === 'LONG' ? '#D4EAD8' : '#F5DACE', color: data.side === 'LONG' ? '#2A5E38' : '#7A2E18' }}>{data.side}</span>
+        <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '11px', fontWeight: 600, color: '#2B2318', flexShrink: 0 }}>{data.pair}</div>
+        <div style={{ flex: 1 }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}>
+          {reviewed && <span style={{ fontSize: '9px', fontWeight: 700, padding: '1px 6px', borderRadius: '99px', background: '#D4EAD8', color: '#2A5E38', border: '1px solid #5DA070', whiteSpace: 'nowrap' }}>Reviewed</span>}
+          <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 7px', borderRadius: '99px', background: sc.bg, color: sc.color, border: '1px solid ' + sc.border, whiteSpace: 'nowrap' }}>{data.status || p.mood}</span>
+        </div>
       </div>
     )
   }
@@ -194,13 +218,13 @@ function WeeklyReview() {
         <div style={{ fontFamily: 'Lora, serif', fontSize: '16px', fontWeight: 600, color: '#2B2318' }}>Old Positions</div>
         <div style={{ fontSize: '11px', color: '#9C856A', marginTop: '2px' }}>Select a trade or position to review</div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', flex: 1, overflow: 'hidden' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '290px 1fr', flex: 1, overflow: 'hidden' }}>
         <div style={{ borderRight: '1px solid #C8B89A', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ display: 'flex', background: '#EDE4D3', borderBottom: '1px solid #C8B89A', padding: '8px', gap: '4px' }}>
             <div onClick={() => setActiveTab('trades')} style={{ flex: 1, textAlign: 'center', padding: '6px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', background: activeTab === 'trades' ? '#F5EFE4' : 'transparent', color: activeTab === 'trades' ? '#2B2318' : '#9C856A', border: activeTab === 'trades' ? '1px solid #C8B89A' : '1px solid transparent' }}>Trade Log ({trades.length})</div>
             <div onClick={() => setActiveTab('positions')} style={{ flex: 1, textAlign: 'center', padding: '6px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', background: activeTab === 'positions' ? '#F5EFE4' : 'transparent', color: activeTab === 'positions' ? '#2B2318' : '#9C856A', border: activeTab === 'positions' ? '1px solid #C8B89A' : '1px solid transparent' }}>Journal ({positions.length})</div>
           </div>
-          <div style={{ flex: 1, overflow: 'auto', padding: '12px' }}>
+          <div style={{ flex: 1, overflow: 'auto', padding: '10px' }}>
             {activeTab === 'trades' && (trades.length === 0 ? <div style={{ fontSize: '13px', color: '#9C856A' }}>No trades logged yet.</div> : trades.map(renderTradeRow))}
             {activeTab === 'positions' && (positions.length === 0 ? <div style={{ fontSize: '13px', color: '#9C856A' }}>No positions logged yet.</div> : positions.map(renderPositionRow))}
           </div>
@@ -223,9 +247,9 @@ function WeeklyReview() {
                     <div>
                       <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '8px' }}>
                         <button type="button" onClick={() => fileRef.current.click()} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', color: '#5A4535', cursor: 'pointer', fontWeight: 600 }}>Browse file</button>
-                        <button type="button" onClick={() => pasteRef.current.focus()} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', color: '#5A4535', cursor: 'pointer', fontWeight: 600 }}>Click then Cmd+V to paste</button>
+                        <button type="button" onClick={() => pasteRef.current.focus()} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '6px', padding: '6px 14px', fontSize: '12px', color: '#5A4535', cursor: 'pointer', fontWeight: 600 }}>Click then Ctrl+V to paste</button>
                       </div>
-                      <div style={{ fontSize: '11px', color: '#C8B89A' }}>Copy chart in TradingView then press Cmd+V</div>
+                      <div style={{ fontSize: '11px', color: '#C8B89A' }}>Copy chart in TradingView then press Ctrl+V</div>
                     </div>
                   )}
                   <input ref={fileRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
