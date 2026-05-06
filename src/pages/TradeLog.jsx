@@ -39,6 +39,7 @@ const emptyForm = {
 
 function TradeLog() {
   const [trades, setTrades] = useState([])
+  const [journalEntries, setJournalEntries] = useState([])
   const [showing, setShowing] = useState(false)
   const [expandedTrade, setExpandedTrade] = useState(null)
   const [editingTrade, setEditingTrade] = useState(null)
@@ -46,8 +47,12 @@ function TradeLog() {
   const [partialForms, setPartialForms] = useState({})
   const [showPartialForm, setShowPartialForm] = useState({})
   const [form, setForm] = useState(emptyForm)
+  const [linkingId, setLinkingId] = useState(null)
 
-  useEffect(() => { fetchTrades() }, [])
+  useEffect(() => {
+    fetchTrades()
+    supabase.from('journal_entries').select('*').order('created_at', { ascending: false }).then(({ data }) => data && setJournalEntries(data))
+  }, [])
 
   const fetchTrades = async () => {
     const { data } = await supabase.from('trades').select('*').order('date', { ascending: false })
@@ -127,6 +132,12 @@ function TradeLog() {
     setTrades(trades.filter(t => t.id !== id))
   }
 
+  const linkToJournal = async (tradeId, journalEntryId) => {
+    await supabase.from('trades').update({ journal_entry_id: journalEntryId || null }).eq('id', tradeId)
+    setLinkingId(null)
+    fetchTrades()
+  }
+
   const addPartial = async (trade) => {
     const pForm = partialForms[trade.id] || {}
     if (!pForm.size || !pForm.exit_price) return
@@ -153,6 +164,11 @@ function TradeLog() {
   const input = { background: '#F5EFE4', border: '1px solid #C8B89A', borderRadius: '8px', padding: '8px 12px', fontSize: '13px', color: '#2B2318', width: '100%', outline: 'none', fontFamily: 'DM Sans, sans-serif' }
   const label = { fontSize: '11px', fontWeight: 600, color: '#9C856A', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '5px', display: 'block' }
   const autoR = calcR(form.side, form.entry_price, form.exit_price, form.stop_price)
+
+  const getLinkedEntry = (trade) => {
+    if (!trade.journal_entry_id) return null
+    return journalEntries.find(j => j.id === trade.journal_entry_id)
+  }
 
   return (
     <div>
@@ -256,6 +272,9 @@ function TradeLog() {
             const partials = t.partials || []
             const pForm = partialForms[t.id] || {}
             const showPForm = showPartialForm[t.id] || false
+            const linkedEntry = getLinkedEntry(t)
+            const isLinking = linkingId === t.id
+
             return (
               <div key={t.id} style={{ borderBottom: i < trades.length - 1 ? '1px solid #C8B89A' : 'none' }}>
                 <div onClick={() => { if (!isEditing) setExpandedTrade(isExpanded ? null : t.id) }} style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr auto auto auto auto', gap: '12px', alignItems: 'center', padding: '12px 18px', background: i % 2 === 0 ? '#EDE4D3' : '#E8DEC8', cursor: 'pointer' }}>
@@ -266,6 +285,7 @@ function TradeLog() {
                     {t.emotion && <span style={{ fontSize: '10px', background: '#F5EFE4', border: '1px solid #C8B89A', borderRadius: '99px', padding: '1px 7px', color: '#5A4535' }}>{t.emotion}</span>}
                     {t.setup && <span style={{ fontSize: '10px', background: '#F5E6C8', border: '1px solid #C8903A', borderRadius: '99px', padding: '1px 7px', color: '#7A4F1A' }}>{t.setup}</span>}
                     {t.mistake && <span style={{ fontSize: '10px', background: '#F5DACE', border: '1px solid #C87055', borderRadius: '99px', padding: '1px 7px', color: '#7A2E18' }}>{t.mistake}</span>}
+                    {linkedEntry && <span style={{ fontSize: '10px', background: '#E6D4F0', border: '1px solid #9A6AC8', borderRadius: '99px', padding: '1px 7px', color: '#5A1A7A' }}>📋 {JSON.parse(linkedEntry.content || '{}').pair || linkedEntry.title}</span>}
                   </div>
                   <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '11px', color: '#9C856A' }}>{t.trade_time ? t.trade_time.slice(0, 5) : t.date}</div>
                   <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '13px', fontWeight: 700, color: t.pnl_r >= 0 ? '#3D7A52' : '#9B3A28', minWidth: '45px', textAlign: 'right' }}>{t.pnl_r > 0 ? '+' : ''}{t.pnl_r}R</div>
@@ -313,6 +333,37 @@ function TradeLog() {
                       </div>
                     )}
 
+                    {linkedEntry && (
+                      <div style={{ background: '#E6D4F0', border: '1px solid #9A6AC8', borderRadius: '10px', padding: '12px 14px', marginBottom: '14px' }}>
+                        <div style={{ fontSize: '10px', fontWeight: 700, color: '#5A1A7A', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>Linked Journal Entry</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '13px', fontWeight: 700, color: '#2B2318' }}>{JSON.parse(linkedEntry.content || '{}').pair}</div>
+                          <div style={{ fontSize: '12px', color: '#5A1A7A' }}>{JSON.parse(linkedEntry.content || '{}').reasoning?.slice(0, 60) || '—'}</div>
+                          <button onClick={() => linkToJournal(t.id, null)} style={{ marginLeft: 'auto', background: 'transparent', border: 'none', fontSize: '11px', color: '#9A6AC8', cursor: 'pointer', textDecoration: 'underline' }}>Unlink</button>
+                        </div>
+                      </div>
+                    )}
+
+                    {isLinking && (
+                      <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '10px', padding: '14px', marginBottom: '14px' }}>
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: '#9C856A', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '10px' }}>Link to Journal Entry</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto' }}>
+                          {journalEntries.map(j => {
+                            const jd = JSON.parse(j.content || '{}')
+                            return (
+                              <div key={j.id} onClick={() => linkToJournal(t.id, j.id)} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', background: t.journal_entry_id === j.id ? '#E6D4F0' : '#F5EFE4', border: t.journal_entry_id === j.id ? '1px solid #9A6AC8' : '1px solid #C8B89A', borderRadius: '8px', cursor: 'pointer' }}>
+                                <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 6px', borderRadius: '5px', background: jd.side === 'LONG' ? '#D4EAD8' : '#F5DACE', color: jd.side === 'LONG' ? '#2A5E38' : '#7A2E18' }}>{jd.side}</span>
+                                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', fontWeight: 600, color: '#2B2318' }}>{jd.pair}</div>
+                                <div style={{ fontSize: '11px', color: '#9C856A', flex: 1 }}>{jd.reasoning?.slice(0, 50) || '—'}</div>
+                                <div style={{ fontSize: '10px', color: '#9C856A' }}>{j.date ? new Date(j.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''}</div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                        <button onClick={() => setLinkingId(null)} style={{ marginTop: '10px', background: 'transparent', border: 'none', fontSize: '11px', color: '#9C856A', cursor: 'pointer' }}>Cancel</button>
+                      </div>
+                    )}
+
                     {partials.length > 0 && (
                       <div style={{ marginBottom: '14px' }}>
                         <div style={{ fontSize: '11px', fontWeight: 700, color: '#9C856A', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>Partials</div>
@@ -328,9 +379,10 @@ function TradeLog() {
                       </div>
                     )}
 
-                    <div style={{ display: 'flex', gap: '8px', marginBottom: showPForm ? '14px' : '0' }}>
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: showPForm ? '14px' : '0', flexWrap: 'wrap' }}>
                       <button onClick={() => startEdit(t)} style={{ background: 'transparent', border: '1px solid #C8B89A', borderRadius: '8px', padding: '7px 16px', fontSize: '12px', fontWeight: 600, color: '#5A4535', cursor: 'pointer' }}>✏️ Edit Trade</button>
                       {!showPForm && <button onClick={() => setShowPartialForm(prev => ({ ...prev, [t.id]: true }))} style={{ background: 'transparent', border: '1px solid #C8903A', borderRadius: '8px', padding: '7px 16px', fontSize: '12px', fontWeight: 600, color: '#C8903A', cursor: 'pointer' }}>+ Add Partial</button>}
+                      <button onClick={() => setLinkingId(isLinking ? null : t.id)} style={{ background: 'transparent', border: '1px solid #9A6AC8', borderRadius: '8px', padding: '7px 16px', fontSize: '12px', fontWeight: 600, color: '#9A6AC8', cursor: 'pointer' }}>📋 {linkedEntry ? 'Change Link' : 'Link to Journal'}</button>
                     </div>
 
                     {showPForm && (
@@ -354,16 +406,14 @@ function TradeLog() {
                 {isEditing && (
                   <div style={{ background: '#F5EFE4', borderTop: '1px solid #C8B89A', padding: '16px 18px' }}>
                     <div style={{ fontSize: '11px', fontWeight: 700, color: '#9C856A', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '14px' }}>Edit Trade</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '12px' }}>
                       <div><label style={label}>Entry Price</label><input type="number" value={editForm.entry_price} onChange={e => setEditForm({ ...editForm, entry_price: e.target.value })} style={input} /></div>
                       <div><label style={label}>Stop Loss</label><input type="number" value={editForm.stop_price} onChange={e => setEditForm({ ...editForm, stop_price: e.target.value })} style={input} /></div>
                       <div><label style={label}>Exit Price</label><input type="number" value={editForm.exit_price} onChange={e => setEditForm({ ...editForm, exit_price: e.target.value })} style={input} /></div>
+                      <div><label style={label}>Notes</label><input type="text" value={editForm.notes} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} style={input} /></div>
                       <div><label style={label}>R P&L</label><input type="number" value={editForm.pnl_r} onChange={e => setEditForm({ ...editForm, pnl_r: e.target.value })} style={input} /></div>
                       <div><label style={label}>$ P&L</label><input type="number" value={editForm.pnl_usd} onChange={e => setEditForm({ ...editForm, pnl_usd: e.target.value })} style={input} /></div>
-                      <div><label style={label}>Notes</label><input type="text" value={editForm.notes} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} style={input} /></div>
-                      <div><label style={label}>Entry Date</label><input type="date" value={editForm.date || ''} onChange={e => setEditForm({ ...editForm, date: e.target.value })} style={input} /></div>
                       <div><label style={label}>Entry Time</label><input type="time" value={editForm.trade_time} onChange={e => setEditForm({ ...editForm, trade_time: e.target.value })} style={input} /></div>
-                      <div><label style={label}>Exit Date</label><input type="date" value={editForm.exit_date} onChange={e => setEditForm({ ...editForm, exit_date: e.target.value })} style={input} /></div>
                       <div><label style={label}>Exit Time</label><input type="time" value={editForm.exit_time} onChange={e => setEditForm({ ...editForm, exit_time: e.target.value })} style={input} /></div>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '14px' }}>

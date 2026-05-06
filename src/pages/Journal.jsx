@@ -50,9 +50,15 @@ function Journal() {
   const [chartFile, setChartFile] = useState(null)
   const [chartPreview, setChartPreview] = useState(null)
   const [uploading, setUploading] = useState(false)
+  const [closingId, setClosingId] = useState(null)
+  const [closeReason, setCloseReason] = useState('')
+  const [closeChartFile, setCloseChartFile] = useState(null)
+  const [closeChartPreview, setCloseChartPreview] = useState(null)
   const [form, setForm] = useState({ pair: 'BTC/USDT', customPair: '', side: 'LONG', entry_price: '', stop_price: '', size: '', leverage: '1x', status: 'Active Bids', reasoning: '', trend: '', conditions: '', chart_rank: '5', chart_rank_tf: 'Daily', date: new Date().toISOString().split('T')[0] })
   const fileRef = useRef()
   const pasteRef = useRef()
+  const closeFileRef = useRef()
+  const closePasteRef = useRef()
 
   useEffect(() => { fetchEntries() }, [])
 
@@ -76,6 +82,19 @@ function Journal() {
         const file = items[i].getAsFile()
         setChartFile(file)
         setChartPreview(URL.createObjectURL(file))
+        break
+      }
+    }
+  }
+
+  const handleClosePaste = (e) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image')) {
+        const file = items[i].getAsFile()
+        setCloseChartFile(file)
+        setCloseChartPreview(URL.createObjectURL(file))
         break
       }
     }
@@ -119,13 +138,26 @@ function Journal() {
     fetchEntries()
   }
 
-  const closePosition = async (entry) => {
+  const confirmClose = async (entry) => {
     const data = JSON.parse(entry.content || '{}')
+    let close_chart_url = null
+    if (closeChartFile) {
+      const fileName = Date.now() + '_close.png'
+      const { error } = await supabase.storage.from('charts').upload(fileName, closeChartFile)
+      if (!error) {
+        const { data: urlData } = supabase.storage.from('charts').getPublicUrl(fileName)
+        close_chart_url = urlData.publicUrl
+      }
+    }
     await supabase.from('journal_entries').update({
-      content: JSON.stringify({ ...data, status: 'Closed' }),
+      content: JSON.stringify({ ...data, status: 'Closed', close_reason: closeReason, close_chart_url }),
       mood: 'Closed',
       tags: [...(entry.tags || []).filter(t => !STATUSES.includes(t) && t !== 'Closed' && t !== 'Active' && t !== 'Watching' && t !== 'Partial'), 'Closed']
     }).eq('id', entry.id)
+    setClosingId(null)
+    setCloseReason('')
+    setCloseChartFile(null)
+    setCloseChartPreview(null)
     fetchEntries()
   }
 
@@ -169,10 +201,7 @@ function Journal() {
     const [open, setOpen] = useState(false)
     return (
       <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
-        <div
-          onClick={e => { e.stopPropagation(); setOpen(!open) }}
-          style={{ fontSize: '10px', fontWeight: 700, padding: '3px 10px', borderRadius: '99px', background: sc.bg, color: sc.color, border: '1.5px solid ' + sc.border, cursor: 'pointer', whiteSpace: 'nowrap', userSelect: 'none' }}
-        >
+        <div onClick={e => { e.stopPropagation(); setOpen(!open) }} style={{ fontSize: '10px', fontWeight: 700, padding: '3px 10px', borderRadius: '99px', background: sc.bg, color: sc.color, border: '1.5px solid ' + sc.border, cursor: 'pointer', whiteSpace: 'nowrap', userSelect: 'none' }}>
           {currentStatus}
         </div>
         {open && (
@@ -197,6 +226,8 @@ function Journal() {
     const sc = statusColor(currentStatus)
     const isExpanded = expanded === entry.id
     const isActive = entry.mood !== 'Closed'
+    const isClosing = closingId === entry.id
+
     return (
       <div key={entry.id} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '12px', overflow: 'hidden' }}>
         <div onClick={() => setExpanded(isExpanded ? null : entry.id)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 18px', cursor: 'pointer' }}>
@@ -239,26 +270,9 @@ function Journal() {
               ))}
             </div>
 
-            {data.reasoning && (
-              <div>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#9C856A', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '6px' }}>Why are you taking this trade?</div>
-                <div style={{ fontSize: '13px', color: '#2B2318', lineHeight: 1.6, background: '#F5EFE4', padding: '12px', borderRadius: '8px' }}>{data.reasoning}</div>
-              </div>
-            )}
-
-            {data.trend && (
-              <div>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#9C856A', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '6px' }}>Current trend / market condition</div>
-                <div style={{ fontSize: '13px', color: '#2B2318', lineHeight: 1.6, background: '#F5EFE4', padding: '12px', borderRadius: '8px' }}>{data.trend}</div>
-              </div>
-            )}
-
-            {data.conditions && (
-              <div>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#9C856A', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '6px' }}>Conditions</div>
-                <div style={{ fontSize: '13px', color: '#2B2318', lineHeight: 1.6, background: '#F5EFE4', padding: '12px', borderRadius: '8px', borderLeft: '3px solid #C8903A' }}>{data.conditions}</div>
-              </div>
-            )}
+            {data.reasoning && <div><div style={{ fontSize: '11px', fontWeight: 700, color: '#9C856A', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '6px' }}>Why are you taking this trade?</div><div style={{ fontSize: '13px', color: '#2B2318', lineHeight: 1.6, background: '#F5EFE4', padding: '12px', borderRadius: '8px' }}>{data.reasoning}</div></div>}
+            {data.trend && <div><div style={{ fontSize: '11px', fontWeight: 700, color: '#9C856A', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '6px' }}>Current trend / market condition</div><div style={{ fontSize: '13px', color: '#2B2318', lineHeight: 1.6, background: '#F5EFE4', padding: '12px', borderRadius: '8px' }}>{data.trend}</div></div>}
+            {data.conditions && <div><div style={{ fontSize: '11px', fontWeight: 700, color: '#9C856A', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '6px' }}>Conditions</div><div style={{ fontSize: '13px', color: '#2B2318', lineHeight: 1.6, background: '#F5EFE4', padding: '12px', borderRadius: '8px', borderLeft: '3px solid #C8903A' }}>{data.conditions}</div></div>}
 
             {data.chart_rank && (
               <div>
@@ -270,22 +284,62 @@ function Journal() {
               </div>
             )}
 
-            {data.chart_url && (
-              <div>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#9C856A', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '6px' }}>Chart</div>
-                <img onClick={() => setExpandedChart(data.chart_url)} src={data.chart_url} style={{ maxWidth: '100%', borderRadius: '8px', cursor: 'pointer', border: '1px solid #C8B89A' }} />
+            {data.chart_url && <div><div style={{ fontSize: '11px', fontWeight: 700, color: '#9C856A', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '6px' }}>Chart</div><img onClick={() => setExpandedChart(data.chart_url)} src={data.chart_url} style={{ maxWidth: '100%', borderRadius: '8px', cursor: 'pointer', border: '1px solid #C8B89A' }} /></div>}
+
+            {data.close_reason && (
+              <div style={{ background: '#F5EFE4', border: '1px solid #C8B89A', borderRadius: '10px', padding: '14px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#9B3A28', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '8px' }}>Why was this closed?</div>
+                <div style={{ fontSize: '13px', color: '#2B2318', lineHeight: 1.6 }}>{data.close_reason}</div>
+                {data.close_chart_url && <img onClick={() => setExpandedChart(data.close_chart_url)} src={data.close_chart_url} style={{ maxWidth: '100%', borderRadius: '8px', cursor: 'pointer', border: '1px solid #C8B89A', marginTop: '10px' }} />}
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: '8px', paddingTop: '4px' }}>
-              {entry.mood !== 'Closed' && (
-                <button onClick={() => closePosition(entry)} style={{ background: '#3D7A52', border: 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '12px', fontWeight: 600, color: 'white', cursor: 'pointer' }}>Mark as Closed</button>
-              )}
-              {entry.mood === 'Closed' && (
-                <button onClick={() => reopenPosition(entry)} style={{ background: '#C8903A', border: 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '12px', fontWeight: 600, color: 'white', cursor: 'pointer' }}>Reopen Position</button>
-              )}
-              <button onClick={() => deleteEntry(entry.id, entry.content)} style={{ background: 'transparent', border: '1px solid #C8B89A', borderRadius: '8px', padding: '8px 16px', fontSize: '12px', fontWeight: 600, color: '#9C856A', cursor: 'pointer' }}>Delete</button>
-            </div>
+            {!isClosing && (
+              <div style={{ display: 'flex', gap: '8px', paddingTop: '4px' }}>
+                {entry.mood !== 'Closed' && (
+                  <button onClick={() => { setClosingId(entry.id); setCloseReason(''); setCloseChartFile(null); setCloseChartPreview(null) }} style={{ background: '#3D7A52', border: 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '12px', fontWeight: 600, color: 'white', cursor: 'pointer' }}>Mark as Closed</button>
+                )}
+                {entry.mood === 'Closed' && (
+                  <button onClick={() => reopenPosition(entry)} style={{ background: '#C8903A', border: 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '12px', fontWeight: 600, color: 'white', cursor: 'pointer' }}>Reopen Position</button>
+                )}
+                <button onClick={() => deleteEntry(entry.id, entry.content)} style={{ background: 'transparent', border: '1px solid #C8B89A', borderRadius: '8px', padding: '8px 16px', fontSize: '12px', fontWeight: 600, color: '#9C856A', cursor: 'pointer' }}>Delete</button>
+              </div>
+            )}
+
+            {isClosing && (
+              <div style={{ background: '#F5EFE4', border: '1px solid #9B3A28', borderRadius: '10px', padding: '16px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: '#9B3A28', marginBottom: '12px' }}>Why are you closing this position?</div>
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={label}>Reason</label>
+                  <textarea
+                    placeholder="e.g. Stop hit, target reached, thesis invalidated, took profit early..."
+                    value={closeReason}
+                    onChange={e => setCloseReason(e.target.value)}
+                    style={{ ...input, height: '80px', resize: 'vertical' }}
+                    autoFocus
+                  />
+                </div>
+                <div style={{ marginBottom: '14px' }}>
+                  <label style={label}>Screenshot (optional)</label>
+                  <div ref={closePasteRef} onPaste={handleClosePaste} tabIndex={0} style={{ border: '2px dashed #C8B89A', borderRadius: '8px', padding: '12px', textAlign: 'center', background: '#EDE4D3', outline: 'none' }}>
+                    {closeChartPreview ? (
+                      <img src={closeChartPreview} style={{ maxHeight: '120px', borderRadius: '6px', objectFit: 'contain' }} />
+                    ) : (
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                        <button type="button" onClick={() => closeFileRef.current.click()} style={{ background: '#F5EFE4', border: '1px solid #C8B89A', borderRadius: '6px', padding: '5px 12px', fontSize: '11px', color: '#5A4535', cursor: 'pointer', fontWeight: 600 }}>Browse file</button>
+                        <button type="button" onClick={() => closePasteRef.current.focus()} style={{ background: '#F5EFE4', border: '1px solid #C8B89A', borderRadius: '6px', padding: '5px 12px', fontSize: '11px', color: '#5A4535', cursor: 'pointer', fontWeight: 600 }}>Click then Ctrl+V</button>
+                      </div>
+                    )}
+                    <input ref={closeFileRef} type="file" accept="image/*" onChange={e => { const f = e.target.files[0]; if (f) { setCloseChartFile(f); setCloseChartPreview(URL.createObjectURL(f)) } }} style={{ display: 'none' }} />
+                  </div>
+                  {closeChartPreview && <button onClick={() => { setCloseChartFile(null); setCloseChartPreview(null) }} style={{ marginTop: '4px', background: 'transparent', border: 'none', fontSize: '11px', color: '#9C856A', cursor: 'pointer' }}>Remove image</button>}
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button onClick={() => confirmClose(entry)} style={{ background: '#9B3A28', border: 'none', borderRadius: '8px', padding: '8px 18px', fontSize: '12px', fontWeight: 600, color: 'white', cursor: 'pointer' }}>Confirm Close</button>
+                  <button onClick={() => { setClosingId(null); setCloseReason(''); setCloseChartFile(null); setCloseChartPreview(null) }} style={{ background: 'transparent', border: '1px solid #C8B89A', borderRadius: '8px', padding: '8px 16px', fontSize: '12px', fontWeight: 600, color: '#9C856A', cursor: 'pointer' }}>Cancel</button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -334,9 +388,9 @@ function Journal() {
               <div><label style={label}>Comparison chart rank</label><div style={{ display: 'flex', gap: '8px' }}><select value={form.chart_rank} onChange={e => setForm({ ...form, chart_rank: e.target.value })} style={{ ...input, width: '80px' }}>{[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n}>{n}</option>)}</select><select value={form.chart_rank_tf} onChange={e => setForm({ ...form, chart_rank_tf: e.target.value })} style={input}>{TIMEFRAMES.map(tf => <option key={tf}>{tf}</option>)}</select></div></div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '12px' }}>
-              <div><label style={label}>Why are you taking this trade?</label><textarea placeholder="e.g. Strong breakout retest on the daily, confluence with weekly level, market structure bullish..." value={form.reasoning} onChange={e => setForm({ ...form, reasoning: e.target.value })} style={{ ...input, height: '80px', resize: 'vertical' }} /></div>
-              <div><label style={label}>Current trend / market condition</label><textarea placeholder="e.g. Overall bullish on BTC, USDT.D showing weakness, altcoins following..." value={form.trend} onChange={e => setForm({ ...form, trend: e.target.value })} style={{ ...input, height: '60px', resize: 'vertical' }} /></div>
-              <div><label style={label}>Are there any conditions?</label><textarea placeholder="e.g. If price breaks below 81k stop is hit, watching for NY open reaction..." value={form.conditions} onChange={e => setForm({ ...form, conditions: e.target.value })} style={{ ...input, height: '60px', resize: 'vertical' }} /></div>
+              <div><label style={label}>Why are you taking this trade?</label><textarea placeholder="e.g. Strong breakout retest on the daily..." value={form.reasoning} onChange={e => setForm({ ...form, reasoning: e.target.value })} style={{ ...input, height: '80px', resize: 'vertical' }} /></div>
+              <div><label style={label}>Current trend / market condition</label><textarea placeholder="e.g. Overall bullish on BTC..." value={form.trend} onChange={e => setForm({ ...form, trend: e.target.value })} style={{ ...input, height: '60px', resize: 'vertical' }} /></div>
+              <div><label style={label}>Are there any conditions?</label><textarea placeholder="e.g. If price breaks below 81k stop is hit..." value={form.conditions} onChange={e => setForm({ ...form, conditions: e.target.value })} style={{ ...input, height: '60px', resize: 'vertical' }} /></div>
             </div>
             <div style={{ marginBottom: '12px' }}>
               <label style={label}>Chart Screenshot</label>
