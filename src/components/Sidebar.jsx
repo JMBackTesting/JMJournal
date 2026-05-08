@@ -8,7 +8,9 @@ function Sidebar({ activePage, setActivePage }) {
     { id: 'weekly', label: 'Old Positions', section: 'review' },
     { id: 'analytics', label: 'Analytics', section: 'review' },
     { id: 'emotionjournal', label: 'Trading Notes', section: 'review' },
+    { id: 'videoreviews', label: 'Video Reviews', section: 'review' },
     { id: 'education', label: 'Education', section: 'review' },
+    { id: 'backups', label: 'Backups', section: 'review' },
     { id: 'export', label: 'Export Data', section: 'review' },
     { id: 'settings', label: 'Settings', section: 'review' },
   ]

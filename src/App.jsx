@@ -8,9 +8,11 @@ import WeeklyReview from './pages/WeeklyReview'
 import Analytics from './pages/Analytics'
 import SpotBuys from './pages/SpotBuys'
 import Education from './pages/Education'
+import Backups from './pages/Backups'
 import Export from './pages/Export'
 import Settings from './pages/Settings'
 import EmotionJournal from './pages/EmotionJournal'
+import VideoReviews from './pages/VideoReviews'
 
 function App() {
   const [activePage, setActivePage] = useState('dashboard')
@@ -26,9 +28,11 @@ function App() {
         {activePage === 'analytics' && <Analytics />}
         {activePage === 'spotbuys' && <SpotBuys />}
         {activePage === 'education' && <Education />}
+        {activePage === 'backups' && <Backups />}
         {activePage === 'export' && <Export />}
         {activePage === 'settings' && <Settings />}
         {activePage === 'emotionjournal' && <EmotionJournal />}
+        {activePage === 'videoreviews' && <VideoReviews />}
       </main>
     </div>
   )
