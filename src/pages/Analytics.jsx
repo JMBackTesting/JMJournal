@@ -33,6 +33,12 @@ function Analytics() {
 
   const trades = getFilteredTrades()
 
+  const getTotalPnlUsd = (t) => {
+    const partials = t.partials || []
+    const partialTotal = partials.reduce((sum, p) => sum + (parseFloat(p.pnl_usd) || 0), 0)
+    return (parseFloat(t.pnl_usd) || 0) + partialTotal
+  }
+
   if (loading) return <div style={{ padding: '40px', fontSize: '13px', color: '#9C856A' }}>Loading...</div>
   if (allTrades.length === 0) return (
     <div>
@@ -48,6 +54,7 @@ function Analytics() {
   const losers = trades.filter(t => t.pnl_r < 0)
   const winRate = totalTrades ? Math.round((winners.length / totalTrades) * 100) : 0
   const netPnl = trades.reduce((sum, t) => sum + (t.pnl_r || 0), 0)
+  const netPnlUsd = trades.reduce((sum, t) => sum + getTotalPnlUsd(t), 0)
   const avgWin = winners.length ? (winners.reduce((s, t) => s + t.pnl_r, 0) / winners.length).toFixed(2) : 0
   const avgLoss = losers.length ? (losers.reduce((s, t) => s + t.pnl_r, 0) / losers.length).toFixed(2) : 0
   const bestTrade = trades.length ? trades.reduce((best, t) => t.pnl_r > best.pnl_r ? t : best, trades[0]) : null
@@ -223,7 +230,6 @@ function Analytics() {
       </div>
 
       <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
         {totalTrades === 0 && (
           <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '12px', padding: '24px', fontSize: '13px', color: '#9C856A' }}>
             No trades in the last {timeframe}. Try a longer timeframe.
@@ -240,10 +246,11 @@ function Analytics() {
 
             {activeTab === 'overview' && (
               <>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
                   {[
                     { label: 'Win Rate', value: winRate + '%', sub: winners.length + 'W / ' + losers.length + 'L', color: winRate >= 50 ? '#3D7A52' : '#9B3A28' },
-                    { label: 'Net P&L', value: (netPnl > 0 ? '+' : '') + netPnl.toFixed(1) + 'R', sub: timeframe === 'All' ? 'all time' : 'last ' + timeframe, color: netPnl >= 0 ? '#3D7A52' : '#9B3A28' },
+                    { label: 'Net R', value: (netPnl > 0 ? '+' : '') + netPnl.toFixed(1) + 'R', sub: timeframe === 'All' ? 'all time' : 'last ' + timeframe, color: netPnl >= 0 ? '#3D7A52' : '#9B3A28' },
+                    { label: 'Net $ P&L', value: (netPnlUsd > 0 ? '+$' : '-$') + Math.abs(netPnlUsd).toFixed(0), sub: 'incl. partials', color: netPnlUsd >= 0 ? '#3D7A52' : '#9B3A28' },
                     { label: 'Expectancy', value: (expectancy > 0 ? '+' : '') + expectancy + 'R', sub: 'per trade avg', color: parseFloat(expectancy) >= 0 ? '#3D7A52' : '#9B3A28' },
                   ].map(s => (
                     <div key={s.label} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '10px', padding: '14px 16px' }}>

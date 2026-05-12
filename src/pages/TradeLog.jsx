@@ -174,7 +174,6 @@ function TradeLog() {
 
   const input = { background: '#F5EFE4', border: '1px solid #C8B89A', borderRadius: '8px', padding: '8px 12px', fontSize: '13px', color: '#2B2318', width: '100%', outline: 'none', fontFamily: 'DM Sans, sans-serif' }
   const label = { fontSize: '11px', fontWeight: 600, color: '#9C856A', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '5px', display: 'block' }
-
   const autoR = calcRFromDollars(form.pnl_usd, form.risk_usd)
 
   const getLinkedEntry = (trade) => {
@@ -315,7 +314,7 @@ function TradeLog() {
                     {t.mistake && <span style={{ fontSize: '10px', background: '#F5DACE', border: '1px solid #C87055', borderRadius: '99px', padding: '1px 7px', color: '#7A2E18' }}>{t.mistake}</span>}
                     {linkedEntry && <span style={{ fontSize: '10px', background: '#E6D4F0', border: '1px solid #9A6AC8', borderRadius: '99px', padding: '1px 7px', color: '#5A1A7A' }}>📋 {JSON.parse(linkedEntry.content || '{}').pair || linkedEntry.title}</span>}
                   </div>
-                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '11px', color: '#9C856A' }}>{t.trade_time ? t.trade_time.slice(0, 5) : t.date}</div>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '11px', color: '#9C856A' }}>{t.date}</div>
                   <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '13px', fontWeight: 700, color: t.pnl_r >= 0 ? '#3D7A52' : '#9B3A28', minWidth: '45px', textAlign: 'right' }}>{t.pnl_r > 0 ? '+' : ''}{t.pnl_r}R</div>
                   {totalPnlUsd !== 0 && <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '13px', fontWeight: 700, color: totalPnlUsd >= 0 ? '#3D7A52' : '#9B3A28', minWidth: '60px', textAlign: 'right' }}>{totalPnlUsd > 0 ? '+$' : '-$'}{Math.abs(totalPnlUsd).toFixed(0)}</div>}
                   <button onClick={e => { e.stopPropagation(); deleteTrade(t.id) }} style={{ background: 'transparent', border: 'none', color: '#C8B89A', cursor: 'pointer', fontSize: '16px', padding: '0 4px' }}>x</button>
@@ -426,8 +425,8 @@ function TradeLog() {
 
                     {showPForm && (
                       <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '10px', padding: '14px', marginTop: '10px' }}>
-                        <div style={{ fontSize: '11px', fontWeight: 700, color: '#9C856A', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>Add Partial Exit</div>
-                        <div style={{ fontSize: '11px', color: '#9C856A', marginBottom: '10px' }}>Enter the net $ profit from this partial (after cuts/fees)</div>
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: '#9C856A', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>Add Partial Exit</div>
+                        <div style={{ fontSize: '11px', color: '#9C856A', marginBottom: '10px' }}>Enter the net $ profit from this partial after cuts/fees</div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
                           <div><label style={label}>$ Profit from this partial</label><input type="number" placeholder="e.g. 45.50 or -20" value={pForm.pnl_usd || ''} onChange={e => setPartialForms(prev => ({ ...prev, [t.id]: { ...pForm, pnl_usd: e.target.value } }))} style={input} /></div>
                           <div><label style={label}>Note (optional)</label><input type="text" placeholder="e.g. took 10% at resistance" value={pForm.note || ''} onChange={e => setPartialForms(prev => ({ ...prev, [t.id]: { ...pForm, note: e.target.value } }))} style={input} /></div>
