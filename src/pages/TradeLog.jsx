@@ -3,38 +3,17 @@ import { supabase } from '../supabase'
 
 const PAIRS = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'HYPE/USDT', 'Other']
 
-function calcR(side, entry, exit, stop) {
-  const e = parseFloat(entry), x = parseFloat(exit), s = parseFloat(stop)
-  if (!e || !x || !s) return ''
-  const risk = side === 'LONG' ? e - s : s - e
-  const reward = side === 'LONG' ? x - e : e - x
-  if (risk <= 0) return ''
-  return (reward / risk).toFixed(2)
-}
-
-function calcWeightedR(side, entry, stop, partials) {
-  if (!partials || partials.length === 0) return null
-  const e = parseFloat(entry), s = parseFloat(stop)
-  if (!e || !s) return null
-  const risk = side === 'LONG' ? e - s : s - e
-  if (risk <= 0) return null
-  let totalSize = 0, weightedR = 0
-  for (const p of partials) {
-    const size = parseFloat(p.size), exit = parseFloat(p.exit_price)
-    if (!size || !exit) continue
-    const reward = side === 'LONG' ? exit - e : e - exit
-    weightedR += (size / 100) * (reward / risk)
-    totalSize += size
-  }
-  if (totalSize === 0) return null
-  return weightedR.toFixed(2)
-}
-
 const emptyForm = {
   pair: 'BTC/USDT', side: 'LONG', entry_price: '', exit_price: '', stop_price: '',
-  pnl_r: '', pnl_usd: '', notes: '', emotion: '', setup: '', mistake: '',
+  pnl_r: '', pnl_usd: '', risk_usd: '', notes: '', emotion: '', setup: '', mistake: '',
   trade_time: '', exit_time: '', exit_date: '',
   date: new Date().toISOString().split('T')[0]
+}
+
+function calcRFromDollars(pnlUsd, riskUsd) {
+  const p = parseFloat(pnlUsd), r = parseFloat(riskUsd)
+  if (!p || !r || r <= 0) return null
+  return (p / r).toFixed(2)
 }
 
 function TradeLog() {
@@ -61,20 +40,48 @@ function TradeLog() {
 
   const updateForm = (field, value) => {
     const updated = { ...form, [field]: value }
-    const auto = calcR(updated.side, updated.entry_price, updated.exit_price, updated.stop_price)
-    if (auto !== '') updated.pnl_r = auto
+    const autoR = calcRFromDollars(
+      field === 'pnl_usd' ? value : updated.pnl_usd,
+      field === 'risk_usd' ? value : updated.risk_usd
+    )
+    if (autoR !== null) updated.pnl_r = autoR
     setForm(updated)
+  }
+
+  const getTotalPnlUsd = (trade) => {
+    const partials = trade.partials || []
+    const partialTotal = partials.reduce((sum, p) => sum + (parseFloat(p.pnl_usd) || 0), 0)
+    const mainPnl = parseFloat(trade.pnl_usd) || 0
+    return partialTotal > 0 ? partialTotal + mainPnl : mainPnl
+  }
+
+  const recalcR = async (trade, newPartials) => {
+    const partialTotal = newPartials.reduce((sum, p) => sum + (parseFloat(p.pnl_usd) || 0), 0)
+    const mainPnl = parseFloat(trade.pnl_usd) || 0
+    const totalPnl = partialTotal + mainPnl
+    const risk = parseFloat(trade.risk_usd)
+    if (risk > 0 && (partialTotal > 0 || mainPnl !== 0)) {
+      const newR = (totalPnl / risk).toFixed(2)
+      await supabase.from('trades').update({ partials: newPartials, pnl_r: parseFloat(newR) }).eq('id', trade.id)
+    } else {
+      await supabase.from('trades').update({ partials: newPartials }).eq('id', trade.id)
+    }
   }
 
   const saveTrade = async () => {
     if (!form.pair || !form.side) return
+    const riskUsd = parseFloat(form.risk_usd) || null
+    const pnlUsd = parseFloat(form.pnl_usd) || null
+    let pnlR = parseFloat(form.pnl_r) || 0
+    if (riskUsd && pnlUsd) pnlR = parseFloat((pnlUsd / riskUsd).toFixed(2))
     await supabase.from('trades').insert([{
       pair: form.pair, side: form.side,
       entry_price: parseFloat(form.entry_price) || null,
       exit_price: parseFloat(form.exit_price) || null,
       stop_price: parseFloat(form.stop_price) || null,
-      pnl_r: parseFloat(form.pnl_r) || 0,
-      pnl_usd: parseFloat(form.pnl_usd) || null,
+      pnl_r: pnlR,
+      pnl_usd: pnlUsd,
+      risk_usd: riskUsd,
       notes: form.notes,
       emotion: form.emotion || null,
       setup: form.setup || null,
@@ -95,6 +102,7 @@ function TradeLog() {
     setEditForm({
       pnl_r: t.pnl_r ?? '',
       pnl_usd: t.pnl_usd ?? '',
+      risk_usd: t.risk_usd ?? '',
       entry_price: t.entry_price ?? '',
       stop_price: t.stop_price ?? '',
       exit_price: t.exit_price ?? '',
@@ -109,9 +117,14 @@ function TradeLog() {
   }
 
   const saveEdit = async (trade) => {
+    const riskUsd = parseFloat(editForm.risk_usd) || null
+    const pnlUsd = parseFloat(editForm.pnl_usd) || null
+    let pnlR = parseFloat(editForm.pnl_r) || 0
+    if (riskUsd && pnlUsd) pnlR = parseFloat((pnlUsd / riskUsd).toFixed(2))
     await supabase.from('trades').update({
-      pnl_r: parseFloat(editForm.pnl_r) || 0,
-      pnl_usd: parseFloat(editForm.pnl_usd) || null,
+      pnl_r: pnlR,
+      pnl_usd: pnlUsd,
+      risk_usd: riskUsd,
       entry_price: parseFloat(editForm.entry_price) || null,
       stop_price: parseFloat(editForm.stop_price) || null,
       exit_price: parseFloat(editForm.exit_price) || null,
@@ -140,13 +153,14 @@ function TradeLog() {
 
   const addPartial = async (trade) => {
     const pForm = partialForms[trade.id] || {}
-    if (!pForm.size || !pForm.exit_price) return
+    if (!pForm.pnl_usd) return
     const existing = trade.partials || []
-    const newPartials = [...existing, { size: parseFloat(pForm.size), exit_price: parseFloat(pForm.exit_price), note: pForm.note || '', date: new Date().toISOString().split('T')[0] }]
-    const weighted = calcWeightedR(trade.side, trade.entry_price, trade.stop_price, newPartials)
-    const updates = { partials: newPartials }
-    if (weighted !== null) updates.pnl_r = parseFloat(weighted)
-    await supabase.from('trades').update(updates).eq('id', trade.id)
+    const newPartials = [...existing, {
+      pnl_usd: parseFloat(pForm.pnl_usd),
+      note: pForm.note || '',
+      date: new Date().toISOString().split('T')[0]
+    }]
+    await recalcR(trade, newPartials)
     setPartialForms(prev => ({ ...prev, [trade.id]: {} }))
     setShowPartialForm(prev => ({ ...prev, [trade.id]: false }))
     fetchTrades()
@@ -154,16 +168,14 @@ function TradeLog() {
 
   const deletePartial = async (trade, index) => {
     const newPartials = (trade.partials || []).filter((_, i) => i !== index)
-    const weighted = calcWeightedR(trade.side, trade.entry_price, trade.stop_price, newPartials)
-    const updates = { partials: newPartials }
-    if (weighted !== null) updates.pnl_r = parseFloat(weighted)
-    await supabase.from('trades').update(updates).eq('id', trade.id)
+    await recalcR(trade, newPartials)
     fetchTrades()
   }
 
   const input = { background: '#F5EFE4', border: '1px solid #C8B89A', borderRadius: '8px', padding: '8px 12px', fontSize: '13px', color: '#2B2318', width: '100%', outline: 'none', fontFamily: 'DM Sans, sans-serif' }
   const label = { fontSize: '11px', fontWeight: 600, color: '#9C856A', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '5px', display: 'block' }
-  const autoR = calcR(form.side, form.entry_price, form.exit_price, form.stop_price)
+
+  const autoR = calcRFromDollars(form.pnl_usd, form.risk_usd)
 
   const getLinkedEntry = (trade) => {
     if (!trade.journal_entry_id) return null
@@ -184,6 +196,7 @@ function TradeLog() {
         {showing && (
           <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '12px', padding: '20px' }}>
             <div style={{ fontFamily: 'Lora, serif', fontSize: '14px', fontWeight: 600, color: '#2B2318', marginBottom: '16px' }}>Log a Trade</div>
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
               <div>
                 <label style={label}>Pair</label>
@@ -199,11 +212,24 @@ function TradeLog() {
               <div><label style={label}>Exit Price</label><input type="number" placeholder="0.00" value={form.exit_price} onChange={e => updateForm('exit_price', e.target.value)} style={input} /></div>
             </div>
 
-            <div style={{ background: '#F5EFE4', border: '1px solid #C8B89A', borderRadius: '8px', padding: '12px 16px', marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '12px', color: '#9C856A', fontWeight: 600 }}>CALCULATED R</span>
-              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '20px', fontWeight: 700, color: parseFloat(autoR) >= 0 ? '#3D7A52' : '#9B3A28' }}>
-                {autoR !== '' ? (parseFloat(autoR) > 0 ? '+' : '') + autoR + 'R' : '— fill in prices above'}
-              </span>
+            <div style={{ background: '#F5EFE4', border: '1px solid #C8B89A', borderRadius: '10px', padding: '14px', marginBottom: '12px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: '#9C856A', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '12px' }}>P&L</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <div>
+                  <label style={label}>$ Risk (max you could lose)</label>
+                  <input type="number" placeholder="e.g. 100" value={form.risk_usd} onChange={e => updateForm('risk_usd', e.target.value)} style={input} />
+                </div>
+                <div>
+                  <label style={label}>$ P&L (net after cuts/fees)</label>
+                  <input type="number" placeholder="e.g. 250 or -100" value={form.pnl_usd} onChange={e => updateForm('pnl_usd', e.target.value)} style={input} />
+                </div>
+              </div>
+              <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '8px', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '12px', color: '#9C856A', fontWeight: 600 }}>CALCULATED R</span>
+                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '20px', fontWeight: 700, color: autoR !== null ? (parseFloat(autoR) >= 0 ? '#3D7A52' : '#9B3A28') : '#C8B89A' }}>
+                  {autoR !== null ? (parseFloat(autoR) > 0 ? '+' : '') + autoR + 'R' : '— enter $ risk and $ P&L above'}
+                </span>
+              </div>
             </div>
 
             <div style={{ background: '#F5EFE4', border: '1px solid #C8B89A', borderRadius: '10px', padding: '14px', marginBottom: '12px' }}>
@@ -222,9 +248,9 @@ function TradeLog() {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-              <div><label style={label}>$ P&L</label><input type="number" placeholder="e.g. 250 or -120" value={form.pnl_usd} onChange={e => updateForm('pnl_usd', e.target.value)} style={input} /></div>
-              <div><label style={label}>Notes</label><textarea placeholder="What happened?" value={form.notes} onChange={e => updateForm('notes', e.target.value)} style={{ ...input, height: '38px', resize: 'none' }} /></div>
+            <div style={{ marginBottom: '12px' }}>
+              <label style={label}>Notes</label>
+              <textarea placeholder="What happened?" value={form.notes} onChange={e => updateForm('notes', e.target.value)} style={{ ...input, height: '38px', resize: 'none' }} />
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '16px' }}>
@@ -274,6 +300,8 @@ function TradeLog() {
             const showPForm = showPartialForm[t.id] || false
             const linkedEntry = getLinkedEntry(t)
             const isLinking = linkingId === t.id
+            const totalPnlUsd = getTotalPnlUsd(t)
+            const partialTotal = partials.reduce((sum, p) => sum + (parseFloat(p.pnl_usd) || 0), 0)
 
             return (
               <div key={t.id} style={{ borderBottom: i < trades.length - 1 ? '1px solid #C8B89A' : 'none' }}>
@@ -289,25 +317,37 @@ function TradeLog() {
                   </div>
                   <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '11px', color: '#9C856A' }}>{t.trade_time ? t.trade_time.slice(0, 5) : t.date}</div>
                   <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '13px', fontWeight: 700, color: t.pnl_r >= 0 ? '#3D7A52' : '#9B3A28', minWidth: '45px', textAlign: 'right' }}>{t.pnl_r > 0 ? '+' : ''}{t.pnl_r}R</div>
-                  {t.pnl_usd != null && <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '13px', fontWeight: 700, color: t.pnl_usd >= 0 ? '#3D7A52' : '#9B3A28', minWidth: '60px', textAlign: 'right' }}>{t.pnl_usd > 0 ? '+$' : '-$'}{Math.abs(t.pnl_usd).toFixed(0)}</div>}
+                  {totalPnlUsd !== 0 && <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '13px', fontWeight: 700, color: totalPnlUsd >= 0 ? '#3D7A52' : '#9B3A28', minWidth: '60px', textAlign: 'right' }}>{totalPnlUsd > 0 ? '+$' : '-$'}{Math.abs(totalPnlUsd).toFixed(0)}</div>}
                   <button onClick={e => { e.stopPropagation(); deleteTrade(t.id) }} style={{ background: 'transparent', border: 'none', color: '#C8B89A', cursor: 'pointer', fontSize: '16px', padding: '0 4px' }}>x</button>
                 </div>
 
                 {isExpanded && !isEditing && (
                   <div style={{ background: '#F5EFE4', borderTop: '1px solid #C8B89A', padding: '16px 18px' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginBottom: '16px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '16px' }}>
                       {[
                         { label: 'Entry', value: t.entry_price },
                         { label: 'Stop', value: t.stop_price },
                         { label: 'Exit', value: t.exit_price },
-                        { label: 'R', value: (t.pnl_r > 0 ? '+' : '') + t.pnl_r + 'R', color: t.pnl_r >= 0 ? '#3D7A52' : '#9B3A28' },
-                        { label: '$ P&L', value: t.pnl_usd != null ? (t.pnl_usd > 0 ? '+$' : '-$') + Math.abs(t.pnl_usd).toFixed(2) : '—', color: t.pnl_usd != null ? (t.pnl_usd >= 0 ? '#3D7A52' : '#9B3A28') : '#9C856A' },
+                        { label: '$ Risk', value: t.risk_usd ? '$' + t.risk_usd : '—', color: '#9B3A28' },
                       ].map(s => (
                         <div key={s.label} style={{ background: '#EDE4D3', borderRadius: '8px', padding: '10px 12px', border: '1px solid #C8B89A' }}>
                           <div style={{ fontSize: '10px', color: '#9C856A', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>{s.label}</div>
                           <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '14px', fontWeight: 700, color: s.color || '#2B2318' }}>{s.value || '—'}</div>
                         </div>
                       ))}
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
+                      <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '8px', padding: '10px 12px' }}>
+                        <div style={{ fontSize: '10px', color: '#9C856A', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>R</div>
+                        <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '18px', fontWeight: 700, color: t.pnl_r >= 0 ? '#3D7A52' : '#9B3A28' }}>{t.pnl_r > 0 ? '+' : ''}{t.pnl_r}R</div>
+                        {t.risk_usd && <div style={{ fontSize: '10px', color: '#9C856A', marginTop: '2px' }}>based on ${t.risk_usd} risk</div>}
+                      </div>
+                      <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '8px', padding: '10px 12px' }}>
+                        <div style={{ fontSize: '10px', color: '#9C856A', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>Total $ P&L</div>
+                        <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '18px', fontWeight: 700, color: totalPnlUsd >= 0 ? '#3D7A52' : '#9B3A28' }}>{totalPnlUsd > 0 ? '+$' : '-$'}{Math.abs(totalPnlUsd).toFixed(2)}</div>
+                        {partialTotal > 0 && <div style={{ fontSize: '10px', color: '#9C856A', marginTop: '2px' }}>${partialTotal.toFixed(2)} from partials</div>}
+                      </div>
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
@@ -369,10 +409,9 @@ function TradeLog() {
                         <div style={{ fontSize: '11px', fontWeight: 700, color: '#9C856A', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>Partials</div>
                         {partials.map((p, pi) => (
                           <div key={pi} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 12px', background: '#EDE4D3', borderRadius: '8px', border: '1px solid #C8B89A', marginBottom: '6px' }}>
-                            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', fontWeight: 700, color: '#C8903A' }}>{p.size}%</span>
-                            <span style={{ fontSize: '12px', color: '#9C856A' }}>exited at</span>
-                            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', fontWeight: 600, color: '#2B2318' }}>{p.exit_price}</span>
+                            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', fontWeight: 700, color: parseFloat(p.pnl_usd) >= 0 ? '#3D7A52' : '#9B3A28' }}>{parseFloat(p.pnl_usd) > 0 ? '+$' : '-$'}{Math.abs(parseFloat(p.pnl_usd)).toFixed(2)}</span>
                             {p.note && <span style={{ fontSize: '12px', color: '#9C856A', flex: 1 }}>{p.note}</span>}
+                            <span style={{ fontSize: '10px', color: '#9C856A' }}>{p.date}</span>
                             <button onClick={() => deletePartial(t, pi)} style={{ background: 'transparent', border: 'none', color: '#C8B89A', cursor: 'pointer', fontSize: '13px' }}>x</button>
                           </div>
                         ))}
@@ -388,12 +427,16 @@ function TradeLog() {
                     {showPForm && (
                       <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '10px', padding: '14px', marginTop: '10px' }}>
                         <div style={{ fontSize: '11px', fontWeight: 700, color: '#9C856A', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>Add Partial Exit</div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                          <div><label style={label}>Size %</label><input type="number" placeholder="e.g. 20" value={pForm.size || ''} onChange={e => setPartialForms(prev => ({ ...prev, [t.id]: { ...pForm, size: e.target.value } }))} style={input} /></div>
-                          <div><label style={label}>Exit Price</label><input type="number" placeholder="0.00" value={pForm.exit_price || ''} onChange={e => setPartialForms(prev => ({ ...prev, [t.id]: { ...pForm, exit_price: e.target.value } }))} style={input} /></div>
-                          <div><label style={label}>Note (optional)</label><input type="text" placeholder="e.g. took profit at S/R" value={pForm.note || ''} onChange={e => setPartialForms(prev => ({ ...prev, [t.id]: { ...pForm, note: e.target.value } }))} style={input} /></div>
+                        <div style={{ fontSize: '11px', color: '#9C856A', marginBottom: '10px' }}>Enter the net $ profit from this partial (after cuts/fees)</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                          <div><label style={label}>$ Profit from this partial</label><input type="number" placeholder="e.g. 45.50 or -20" value={pForm.pnl_usd || ''} onChange={e => setPartialForms(prev => ({ ...prev, [t.id]: { ...pForm, pnl_usd: e.target.value } }))} style={input} /></div>
+                          <div><label style={label}>Note (optional)</label><input type="text" placeholder="e.g. took 10% at resistance" value={pForm.note || ''} onChange={e => setPartialForms(prev => ({ ...prev, [t.id]: { ...pForm, note: e.target.value } }))} style={input} /></div>
                         </div>
-                        <div style={{ fontSize: '11px', color: '#9C856A', marginBottom: '10px' }}>Stop loss used for R calc: <strong>{t.stop_price || 'not set'}</strong></div>
+                        {t.risk_usd && pForm.pnl_usd && (
+                          <div style={{ fontSize: '12px', color: '#9C856A', marginBottom: '10px', background: '#F5EFE4', padding: '8px 12px', borderRadius: '6px' }}>
+                            This partial = <strong style={{ color: parseFloat(pForm.pnl_usd) >= 0 ? '#3D7A52' : '#9B3A28' }}>{(parseFloat(pForm.pnl_usd) / parseFloat(t.risk_usd)).toFixed(2)}R</strong> on its own
+                          </div>
+                        )}
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <button onClick={() => addPartial(t)} style={{ background: '#C8903A', border: 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', fontWeight: 600, color: 'white', cursor: 'pointer' }}>Save Partial</button>
                           <button onClick={() => setShowPartialForm(prev => ({ ...prev, [t.id]: false }))} style={{ background: 'transparent', border: '1px solid #C8B89A', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', fontWeight: 600, color: '#9C856A', cursor: 'pointer' }}>Cancel</button>
@@ -411,7 +454,7 @@ function TradeLog() {
                       <div><label style={label}>Stop Loss</label><input type="number" value={editForm.stop_price} onChange={e => setEditForm({ ...editForm, stop_price: e.target.value })} style={input} /></div>
                       <div><label style={label}>Exit Price</label><input type="number" value={editForm.exit_price} onChange={e => setEditForm({ ...editForm, exit_price: e.target.value })} style={input} /></div>
                       <div><label style={label}>Notes</label><input type="text" value={editForm.notes} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} style={input} /></div>
-                      <div><label style={label}>R P&L</label><input type="number" value={editForm.pnl_r} onChange={e => setEditForm({ ...editForm, pnl_r: e.target.value })} style={input} /></div>
+                      <div><label style={label}>$ Risk</label><input type="number" value={editForm.risk_usd} onChange={e => setEditForm({ ...editForm, risk_usd: e.target.value })} style={input} /></div>
                       <div><label style={label}>$ P&L</label><input type="number" value={editForm.pnl_usd} onChange={e => setEditForm({ ...editForm, pnl_usd: e.target.value })} style={input} /></div>
                       <div><label style={label}>Entry Time</label><input type="time" value={editForm.trade_time} onChange={e => setEditForm({ ...editForm, trade_time: e.target.value })} style={input} /></div>
                       <div><label style={label}>Exit Time</label><input type="time" value={editForm.exit_time} onChange={e => setEditForm({ ...editForm, exit_time: e.target.value })} style={input} /></div>
