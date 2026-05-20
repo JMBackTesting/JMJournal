@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../supabase'
 
 const CATEGORIES = ['Emotion', 'Setup Observation', 'Market Note', 'Lesson', 'Mistake', 'General']
@@ -41,10 +41,20 @@ function TradingNotes() {
   const [entries, setEntries] = useState([])
   const [showing, setShowing] = useState(false)
   const [expanded, setExpanded] = useState(null)
+  const [expandedChart, setExpandedChart] = useState(null)
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState({})
   const [form, setForm] = useState(emptyForm)
   const [filterCategory, setFilterCategory] = useState('All')
+  const [chartFile, setChartFile] = useState(null)
+  const [chartPreview, setChartPreview] = useState(null)
+  const [editChartFile, setEditChartFile] = useState(null)
+  const [editChartPreview, setEditChartPreview] = useState(null)
+  const [uploading, setUploading] = useState(false)
+  const fileRef = useRef()
+  const pasteRef = useRef()
+  const editFileRef = useRef()
+  const editPasteRef = useRef()
 
   useEffect(() => { fetchEntries() }, [])
 
@@ -53,8 +63,32 @@ function TradingNotes() {
     if (data) setEntries(data)
   }
 
+  const uploadChart = async (file) => {
+    if (!file) return null
+    const fileName = Date.now() + '_note.png'
+    const { error } = await supabase.storage.from('charts').upload(fileName, file)
+    if (error) return null
+    const { data: urlData } = supabase.storage.from('charts').getPublicUrl(fileName)
+    return urlData.publicUrl
+  }
+
+  const handlePaste = (e, setFile, setPreview) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image')) {
+        const file = items[i].getAsFile()
+        setFile(file)
+        setPreview(URL.createObjectURL(file))
+        break
+      }
+    }
+  }
+
   const saveEntry = async () => {
     if (!form.notes && !form.title) return
+    setUploading(true)
+    const chart_url = await uploadChart(chartFile)
     await supabase.from('emotion_journal').insert([{
       date: form.date,
       title: form.title || null,
@@ -63,13 +97,23 @@ function TradingNotes() {
       pre_mood: form.pre_mood || null,
       notes: form.notes || null,
       lessons: form.lessons || null,
+      energy: chart_url || null,
     }])
     setForm(emptyForm)
+    setChartFile(null)
+    setChartPreview(null)
     setShowing(false)
+    setUploading(false)
     fetchEntries()
   }
 
   const saveEdit = async (id) => {
+    setUploading(true)
+    let chart_url = editForm.energy || null
+    if (editChartFile) {
+      const uploaded = await uploadChart(editChartFile)
+      if (uploaded) chart_url = uploaded
+    }
     await supabase.from('emotion_journal').update({
       title: editForm.title || null,
       category: editForm.category || 'General',
@@ -77,8 +121,12 @@ function TradingNotes() {
       pre_mood: editForm.pre_mood || null,
       notes: editForm.notes || null,
       lessons: editForm.lessons || null,
+      energy: chart_url || null,
     }).eq('id', id)
     setEditingId(null)
+    setEditChartFile(null)
+    setEditChartPreview(null)
+    setUploading(false)
     fetchEntries()
   }
 
@@ -104,7 +152,28 @@ function TradingNotes() {
     return <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: mc.bg, color: mc.color, border: '1px solid ' + mc.border }}>{mood}</span>
   }
 
-  const renderForm = (f, setF, onSave, onCancel) => (
+  const renderScreenshotUpload = (preview, setFile, setPreview, fRef, pRef) => (
+    <div>
+      <label style={label}>Screenshot (optional)</label>
+      <div ref={pRef} onPaste={e => handlePaste(e, setFile, setPreview)} tabIndex={0} style={{ border: '2px dashed #C8B89A', borderRadius: '8px', padding: '14px', textAlign: 'center', background: '#F5EFE4', outline: 'none' }}>
+        {preview ? (
+          <img src={preview} style={{ maxHeight: '160px', borderRadius: '6px', objectFit: 'contain' }} />
+        ) : (
+          <div>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '6px' }}>
+              <button type="button" onClick={() => fRef.current.click()} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '6px', padding: '5px 12px', fontSize: '12px', color: '#5A4535', cursor: 'pointer', fontWeight: 600 }}>Browse file</button>
+              <button type="button" onClick={() => pRef.current.focus()} style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '6px', padding: '5px 12px', fontSize: '12px', color: '#5A4535', cursor: 'pointer', fontWeight: 600 }}>Click then Ctrl+V</button>
+            </div>
+            <div style={{ fontSize: '11px', color: '#C8B89A' }}>Paste or upload a chart screenshot</div>
+          </div>
+        )}
+        <input ref={fRef} type="file" accept="image/*" onChange={e => { const f = e.target.files[0]; if (f) { setFile(f); setPreview(URL.createObjectURL(f)) } }} style={{ display: 'none' }} />
+      </div>
+      {preview && <button onClick={() => { setFile(null); setPreview(null) }} style={{ marginTop: '4px', background: 'transparent', border: 'none', fontSize: '11px', color: '#9C856A', cursor: 'pointer' }}>Remove image</button>}
+    </div>
+  )
+
+  const renderForm = (f, setF, onSave, onCancel, isEdit = false) => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
         <div>
@@ -171,8 +240,13 @@ function TradingNotes() {
         </div>
       )}
 
+      {isEdit
+        ? renderScreenshotUpload(editChartPreview || f.energy, setEditChartFile, setEditChartPreview, editFileRef, editPasteRef)
+        : renderScreenshotUpload(chartPreview, setChartFile, setChartPreview, fileRef, pasteRef)
+      }
+
       <div style={{ display: 'flex', gap: '10px' }}>
-        <button onClick={onSave} style={{ background: '#C8903A', border: 'none', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: 600, color: 'white', cursor: 'pointer' }}>Save</button>
+        <button onClick={onSave} style={{ background: '#C8903A', border: 'none', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: 600, color: 'white', cursor: 'pointer' }}>{uploading ? 'Saving...' : 'Save'}</button>
         <button onClick={onCancel} style={{ background: 'transparent', border: '1px solid #C8B89A', borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: 600, color: '#9C856A', cursor: 'pointer' }}>Cancel</button>
       </div>
     </div>
@@ -180,6 +254,12 @@ function TradingNotes() {
 
   return (
     <div>
+      {expandedChart && (
+        <div onClick={() => setExpandedChart(null)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <img src={expandedChart} style={{ maxWidth: '90%', maxHeight: '90%', borderRadius: '8px' }} />
+        </div>
+      )}
+
       <div style={{ background: '#EDE4D3', borderBottom: '1px solid #C8B89A', padding: '14px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <div style={{ fontFamily: 'Lora, serif', fontSize: '16px', fontWeight: 600, color: '#2B2318' }}>Trading Notes</div>
@@ -193,7 +273,7 @@ function TradingNotes() {
         {showing && (
           <div style={{ background: '#EDE4D3', border: '1px solid #C8B89A', borderRadius: '12px', padding: '20px' }}>
             <div style={{ fontFamily: 'Lora, serif', fontSize: '14px', fontWeight: 600, color: '#2B2318', marginBottom: '16px' }}>New Note</div>
-            {renderForm(form, setForm, saveEntry, () => { setShowing(false); setForm(emptyForm) })}
+            {renderForm(form, setForm, saveEntry, () => { setShowing(false); setForm(emptyForm); setChartFile(null); setChartPreview(null) })}
           </div>
         )}
 
@@ -233,6 +313,7 @@ function TradingNotes() {
                 <div style={{ flex: 1, fontSize: '13px', color: '#2B2318', fontWeight: entry.title ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {entry.title || entry.notes}
                 </div>
+                {entry.energy && <span style={{ fontSize: '11px', color: '#9C856A' }}>📸</span>}
                 <span style={{ fontSize: '14px', color: '#9C856A' }}>{isExpanded ? '▲' : '▼'}</span>
               </div>
 
@@ -253,8 +334,14 @@ function TradingNotes() {
                       <div style={{ fontSize: '13px', color: '#2B2318', lineHeight: 1.7, background: '#EDE4D3', padding: '12px', borderRadius: '8px', borderLeft: '3px solid #C8903A', whiteSpace: 'pre-wrap' }}>{entry.lessons}</div>
                     </div>
                   )}
+                  {entry.energy && (
+                    <div>
+                      <div style={{ fontSize: '10px', fontWeight: 700, color: '#9C856A', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>Screenshot</div>
+                      <img onClick={() => setExpandedChart(entry.energy)} src={entry.energy} style={{ maxWidth: '100%', borderRadius: '8px', cursor: 'pointer', border: '1px solid #C8B89A' }} />
+                    </div>
+                  )}
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={() => { setEditingId(entry.id); setEditForm({ date: entry.date, title: entry.title || '', category: entry.category || 'General', pair: entry.pair || 'General', pre_mood: entry.pre_mood || '', notes: entry.notes || '', lessons: entry.lessons || '' }) }} style={{ background: 'transparent', border: '1px solid #C8B89A', borderRadius: '8px', padding: '7px 16px', fontSize: '12px', fontWeight: 600, color: '#5A4535', cursor: 'pointer' }}>✏️ Edit</button>
+                    <button onClick={() => { setEditingId(entry.id); setEditForm({ date: entry.date, title: entry.title || '', category: entry.category || 'General', pair: entry.pair || 'General', pre_mood: entry.pre_mood || '', notes: entry.notes || '', lessons: entry.lessons || '', energy: entry.energy || null }); setEditChartPreview(entry.energy || null); setEditChartFile(null) }} style={{ background: 'transparent', border: '1px solid #C8B89A', borderRadius: '8px', padding: '7px 16px', fontSize: '12px', fontWeight: 600, color: '#5A4535', cursor: 'pointer' }}>✏️ Edit</button>
                     <button onClick={() => deleteEntry(entry.id)} style={{ background: 'transparent', border: '1px solid #C8B89A', borderRadius: '8px', padding: '7px 16px', fontSize: '12px', fontWeight: 600, color: '#9C856A', cursor: 'pointer' }}>Delete</button>
                   </div>
                 </div>
@@ -262,7 +349,7 @@ function TradingNotes() {
 
               {isEditing && (
                 <div style={{ borderTop: '1px solid #C8B89A', padding: '16px 18px', background: '#F5EFE4' }}>
-                  {renderForm(editForm, setEditForm, () => saveEdit(entry.id), () => setEditingId(null))}
+                  {renderForm(editForm, setEditForm, () => saveEdit(entry.id), () => { setEditingId(null); setEditChartFile(null); setEditChartPreview(null) }, true)}
                 </div>
               )}
             </div>
